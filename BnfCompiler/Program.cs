@@ -19,32 +19,18 @@ namespace BnfCompiler
                 return 1;
             }
 
-            // read file
-            System.Console.WriteLine("Processing file: " + args[0]);
+            // verify file exists
             var file = args[0];
-
-            string contents = "";
-            try
+            if (!File.Exists(file))
             {
-                //read contents of file
-                FileStream fileStream = new FileStream(file, FileMode.Open);
-                using (StreamReader reader = new StreamReader(fileStream))
-                {
-                    contents = reader.ReadToEnd();
-                }
-            } 
-            catch (System.IO.FileNotFoundException) 
-            {
-                // catch error where file doesn't exist
-                System.Console.WriteLine("Error: Could not read file. Please give the absolute path of the file.");
+                System.Console.WriteLine("Error: Unable to read file.\nPlease give the full name of the file to be processed");
                 return 1;
             }
 
-            //test to check file contents
-            for (int i = 0; i < contents.Length; i++)
-            {
-                System.Console.WriteLine(i + ": " + contents.Substring(i, 1));
-            }
+            System.Console.WriteLine("Processing file: " + file.Substring(file.LastIndexOf('/') + 1));
+
+            //var scanner = new Scanner2(file);
+            //scanner.ScanFile();
 
             return 0;
         }
