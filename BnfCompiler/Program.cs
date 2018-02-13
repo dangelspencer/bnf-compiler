@@ -29,8 +29,13 @@ namespace BnfCompiler
 
             System.Console.WriteLine("Processing file: " + file.Substring(file.LastIndexOf('/') + 1));
 
-            //var scanner = new Scanner2(file);
-            //scanner.ScanFile();
+            var scanner = new Scanner(file);
+            var result = scanner.Scan();
+            while (result != null) 
+            {
+                Console.WriteLine(result);
+                result = scanner.Scan();
+            }
 
             return 0;
         }
