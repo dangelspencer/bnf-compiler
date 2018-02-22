@@ -1,5 +1,0 @@
-/* Test comment */
-// Test comment 2
-/* Test /* Nested Comment */ */
-/*/*/*/*/* It's comments all the way down*/*/*/*/*/
-/
