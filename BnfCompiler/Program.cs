@@ -72,12 +72,12 @@ namespace BnfCompiler
                 var nullString = "(null)";
                 var emptyString = "";
                 var scanner = new Scanner(file);
-                var result = scanner._stack.Pop();
+                var result = scanner.Stack.Pop();
                 while (result != null)
                 {
                     var nullValue = result.Value == null ? nullString : emptyString;
                     Console.WriteLine($"({result.LineIndex}, {result.CharIndex}) {result.Value} {nullValue}");
-                    result = scanner._stack.Pop();
+                    result = scanner.Stack.Pop();
                 }
             }
             else

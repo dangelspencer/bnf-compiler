@@ -6,181 +6,190 @@ namespace BnfCompiler
 {
     public class Scanner
     {
-        readonly StreamReader _reader;
-        public Stack<Token> _stack;
-        public bool EndOfFile;
+        private List<string> Keywords = new List<string>() { "PROGRAM", "IS", "BEGIN", "END", "GLOBAL", "PROCEDURE", "IN", "OUT", "INOUT", "INTEGER", "FLOAT", "STRING", "CHAR", "BOOL", "TRUE", "FALSE", "IF", "THEN", "ELSE", "FOR", "RETURN", "NOT" };
+        private List<string> Specials = new List<string>() { ";", "\"", "'", "[", "]", ".", "(", ")", ",", ":", ":=", "==", "&", "|", "<", "<=", ">", ">=", "!=", "*", "/", "-", "+" };
         public List<string> FileLines = new List<string>();
-        public int _lineIndex = 0;
-        public int _charIndex = 0;
-        public string _currentLine = "";
 
+        private List<Token> tokenList;
+        private int commentLevel = 0;
+
+        public Stack<Token> Stack;
         public Scanner(string file)
         {
             FileStream fileStream = new FileStream(file, FileMode.Open);
-            _reader = new StreamReader(fileStream);
-            _stack = new Stack<Token>();
+            var _reader = new StreamReader(fileStream);
+            Stack = new Stack<Token>();
 
-            var tokenList = new List<Token>();
+            tokenList = new List<Token>();
 
-            while (!_reader.EndOfStream)
+            var fileContents = _reader.ReadToEnd();
+            var lines = fileContents.Split('\n');
+
+            for (var i = 0; i < lines.Length; i++)
             {
-                var token = getNextToken();
+                FileLines.Add(lines[i]);
 
-                //ignore whitespace
-                while (Char.IsWhiteSpace(token) || token == '\n')
+                var line = lines[i].Replace('\t', ' ').Trim();
+
+                var words = line.ToUpper().Split(' ');
+
+                foreach (var word in words)
                 {
-                    if (_reader.EndOfStream)
+                    Console.Write($"Lexing: {word} -> ");
+                    var type = LexWord(word, true);
+                    if (type == Type.UNKNOWN)
                     {
+                        Console.WriteLine($"\nWARNING: '{word}' unknown, falling back to char by char");
+                        LexCharacterByCharacter(word);
+                        Console.WriteLine();
+                    }
+                    else if (type == Type.LINE_COMMENT)
+                    {
+                        i += 1;
                         break;
                     }
-
-                    token = getNextToken();
-                }
-
-                if (Char.IsSymbol(token))
-                {
-                    tokenList.Add(new Token(token.ToString(), Type.SPECIAL, _lineIndex, _charIndex));
-                    continue;
-                }
-
-                if (Char.IsLetter(token))
-                {
-                    //identifier
-                    var str = token.ToString();
-                    while (Char.IsLetterOrDigit((char)_reader.Peek()) || (char)_reader.Peek() == '_')
+                    else if (type == Type.BLOCK_COMMENT)
                     {
-                        token = getNextToken();
-                        str += token.ToString();
+                        Console.WriteLine($"Comment Level: {commentLevel}");
                     }
-                    tokenList.Add(new Token(str.ToUpper(), Type.IDENTIFIER, _lineIndex, _charIndex));
-                    continue;
                 }
-                if (Char.IsDigit(token))
-                {
-                    //number
-                    var str = token.ToString();
-                    var hasDecimal = false;
-                    while (Char.IsDigit((char)_reader.Peek()) || (char)_reader.Peek() == '.' || (char)_reader.Peek() == '_')
-                    {
-                        token = (char)_reader.Peek();
-                        if (!hasDecimal && token == '.')
-                        {
-                            hasDecimal = true;
-                            token = getNextToken();
-                            str += token.ToString();
-                        }
-                        else if (token == '.')
-                        {
-                            tokenList.Add(new Token(str.ToUpper(), Type.FLOAT, _lineIndex, _charIndex)); //TODO throw error about unexpected '.'
-                            continue;
-                        }
-
-
-                    }
-                    if (hasDecimal)
-                    {
-                        tokenList.Add(new Token(str.ToUpper(), Type.FLOAT, _lineIndex, _charIndex));
-                        continue;
-                    }
-                    tokenList.Add(new Token(str.ToUpper(), Type.INTEGER, _lineIndex, _charIndex));
-                    continue;
-                }
-                if (token == '/' && (char)_reader.Peek() == '/')
-                {
-                    // single line comment
-                    while (token != '\n')
-                    {
-                        token = getNextToken();
-                    }
-                    continue; // get the next token after the comment
-                }
-                if (token == '/' && (char)_reader.Peek() == '*')
-                {
-                    // block comment
-                    token = getNextToken(); //token = *
-                    var level = 1;
-                    do
-                    {
-                        token = getNextToken();
-                        if (token == '*' && (char)_reader.Peek() == '/')
-                        {
-                            level--;
-                            getNextToken();
-                            continue;
-                        }
-                        if (token == '/' && (char)_reader.Peek() == '*')
-                        {
-                            level++;
-                        }
-                    }
-                    while (level > 0);
-                    continue; // get the next token after the comment
-                }
-                if (token == '"')
-                {
-                    // string
-                    var str = "";
-                    var valid = true;
-                    do
-                    {
-                        token = getNextToken();
-                        if (!Char.IsLetterOrDigit(token) || token != '_' || token != ';' || token != ':' || token != '.' || token != '\'' || token == '"')
-                        {
-                            valid = false;
-                        }
-                        else
-                        {
-                            str += token.ToString();
-                        }
-                    }
-                    while (valid);
-                    tokenList.Add(new Token(str.ToUpper(), Type.STRING, _lineIndex, _charIndex));
-                    continue;
-                }
-                if (token == '\'')
-                {
-                    // char 
-                    if ((char)_reader.Peek() == '\'')
-                    {
-                        getNextToken();
-                        tokenList.Add(new Token("", Type.CHAR, _lineIndex, _charIndex)); ;
-                    }
-                    token = getNextToken();
-                    if ((char)_reader.Peek() != '\'')
-                    {
-                        throw new Exception("Multi-character chars are not allowed");
-                    }
-                    tokenList.Add(new Token(token.ToString().ToUpper(), Type.CHAR, _lineIndex, _charIndex));
-                    continue;
-                }
-                tokenList.Add(new Token(token.ToString().ToUpper(), Type.UNKNOWN, _lineIndex, _charIndex));
-                continue;
             }
 
-            for (int i = tokenList.Count - 2; i >= 0; i--)
+            Console.WriteLine($"Final comment level (should be 0): {commentLevel}");
+
+            Console.WriteLine("\n\n\nTokens:");
+
+            foreach(var token in tokenList)
             {
-                _stack.Push(tokenList[i]);
+                Console.WriteLine($"{token.Value} -> {Enum.GetName(typeof(Type), token.Type)}");
+            }
+
+            for (var i = tokenList.Count - 1; i >= 0; i--)
+            {
+                Stack.Push(tokenList[i]);
             }
         }
 
+        public Type LexWord(string word, bool createToken = false)
+        {
+            float tempFloat = 0;
+            int tempInt = 0;
+            var type = Type.UNKNOWN;
+            if (word == "//")
+            {
+                // opening comment
+                type = Type.LINE_COMMENT;
+            }
+            else if (word == "/*") 
+            {
+                if (createToken) commentLevel += 1;
+                type = Type.BLOCK_COMMENT;
+            }
+            else if (word == "*/")
+            {
+                if (createToken) commentLevel -= 1;
+                type = Type.BLOCK_COMMENT;
+            }
+            else if (String.IsNullOrWhiteSpace(word))
+            {
+                // whitespace
+                type = Type.WHITESPACE;
+            }
+            else if (Keywords.Contains(word))
+            {
+                // keyword
+                type = Type.KEYWORD;
+            }
+            else if (Specials.Contains(word))
+            {
+                // special character
+                type = Type.SPECIAL;
+            }
+            else if (word.StartsWith("\"") && word.EndsWith("\""))
+            {
+                // string
+                type = Type.STRING;
+            }
+            else if (word.StartsWith("\"") && word.EndsWith("\""))
+            {
+                // char
+                type = Type.CHAR;
+            }
+            else if (Int32.TryParse(word, out tempInt))
+            {
+                // integer
+                type = Type.INTEGER;
+            }
+            else if (float.TryParse(word, out tempFloat))
+            {
+                // float
+                type = Type.FLOAT;
+            }
+            else if (validIdentifier(word))
+            {
+                // identifier
+                type = Type.IDENTIFIER;
+            }
 
-        public char getNextToken() {
-            var token = (char)_reader.Read();
-            
-            if (token == '\n')
+            if (createToken)
             {
-                FileLines.Add(_currentLine);
-                _currentLine = "";
-                _charIndex = -1;
-                _lineIndex += 1;
+                if (type != Type.WHITESPACE && type != Type.UNKNOWN && type != Type.BLOCK_COMMENT && type != Type.LINE_COMMENT && commentLevel == 0)
+                {
+                    tokenList.Add(new Token(word, type, 0, 0));
+                }
+
+                Console.WriteLine(Enum.GetName(typeof(Type), type));
             }
-            else 
+
+            return type;
+        }
+
+        public bool validIdentifier(string word)
+        {
+            string allowableLetters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ_";
+
+            foreach (char c in word)
             {
-                _currentLine += token.ToString();
-                _charIndex += 1;
+                if (!allowableLetters.Contains(c.ToString()))
+                {
+                    return false;
+                }
             }
-            //Console.WriteLine($"Line: {_lineIndex}, Char: {_charIndex} - {token}");
-            return token;
+
+            return true;
+        }
+
+        public void LexCharacterByCharacter(string word)
+        {
+            var i = word.Length;
+            if (i == 0)
+            {
+                return;
+            }
+
+            var type = LexWord(word.Substring(0, i));
+            while (type == Type.UNKNOWN)
+            {
+                if (i - 1 == 0) 
+                {
+                    Console.Write($"Lexing: {word.Substring(0, i)} -> ");
+                    LexWord(word.Substring(0, i), true);
+                    return;
+                }
+
+                i -= 1;
+                type = LexWord(word.Substring(0, i));
+            }
+
+            Console.Write($"Lexing: {word.Substring(0, i)} -> ");
+            LexWord(word.Substring(0, i), true);
+
+            if (type == Type.BLOCK_COMMENT)
+            {
+                Console.WriteLine($"Comment Level: {commentLevel}");
+            }
+
+            LexCharacterByCharacter(word.Substring(i));
         }
     }
 }

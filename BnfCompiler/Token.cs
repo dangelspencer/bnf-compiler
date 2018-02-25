@@ -10,7 +10,10 @@ namespace BnfCompiler
         CHAR,
         KEYWORD,
         SPECIAL,
-        UNKNOWN
+        UNKNOWN,
+        WHITESPACE,
+        BLOCK_COMMENT,
+        LINE_COMMENT
     }
 
     public enum Keyword
