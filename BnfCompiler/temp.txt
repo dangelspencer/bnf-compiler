@@ -1,0 +1,20 @@
+Processing file: test_heap.src
+Lexing: p -> UNKNOWN
+Lexing: p -> UNKNOWN
+Lexing: s -> UNKNOWN
+Lexing: b -> UNKNOWN
+Lexing: p -> UNKNOWN
+Lexing: g -> UNKNOWN
+Lexing: i -> UNKNOWN
+Lexing: p -> UNKNOWN
+Lexing: e -> UNKNOWN
+Lexing: p -> UNKNOWN
+Lexing: e -> UNKNOWN
+Lexing: b -> UNKNOWN
+Lexing: p -> UNKNOWN
+Lexing: e -> UNKNOWN
+Final comment level (should be 0): 0
+
+
+
+Tokens:

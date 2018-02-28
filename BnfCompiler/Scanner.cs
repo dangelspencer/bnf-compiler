@@ -1,17 +1,20 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 
 namespace BnfCompiler
 {
     public class Scanner
     {
-        private List<string> Keywords = new List<string>() { "PROGRAM", "IS", "BEGIN", "END", "GLOBAL", "PROCEDURE", "IN", "OUT", "INOUT", "INTEGER", "FLOAT", "STRING", "CHAR", "BOOL", "TRUE", "FALSE", "IF", "THEN", "ELSE", "FOR", "RETURN", "NOT" };
+        private List<string> Keywords = new List<string>() { "PROGRAM", "IS", "BEGIN", "END", "GLOBAL", "PROCEDURE", "IN", "OUT", "INOUT", "INTEGER", "FLOAT", "STRING", "CHAR", "BOOL", "IF", "THEN", "ELSE", "FOR", "RETURN", "NOT" };
         private List<string> Specials = new List<string>() { ";", "\"", "'", "[", "]", ".", "(", ")", ",", ":", ":=", "==", "&", "|", "<", "<=", ">", ">=", "!=", "*", "/", "-", "+" };
         public List<string> FileLines = new List<string>();
 
         private List<Token> tokenList;
         private int commentLevel = 0;
+        private int currentLine;
+        private bool isLineComment = false;
 
         public Stack<Token> Stack;
         public Scanner(string file)
@@ -27,32 +30,14 @@ namespace BnfCompiler
 
             for (var i = 0; i < lines.Length; i++)
             {
-                FileLines.Add(lines[i]);
+                currentLine = i;
 
                 var line = lines[i].Replace('\t', ' ').Trim();
-
-                var words = line.ToUpper().Split(' ');
-
-                foreach (var word in words)
-                {
-                    Console.Write($"Lexing: {word} -> ");
-                    var type = LexWord(word, true);
-                    if (type == Type.UNKNOWN)
-                    {
-                        Console.WriteLine($"\nWARNING: '{word}' unknown, falling back to char by char");
-                        LexCharacterByCharacter(word);
-                        Console.WriteLine();
-                    }
-                    else if (type == Type.LINE_COMMENT)
-                    {
-                        i += 1;
-                        break;
-                    }
-                    else if (type == Type.BLOCK_COMMENT)
-                    {
-                        Console.WriteLine($"Comment Level: {commentLevel}");
-                    }
-                }
+                FileLines.Add(line);
+                isLineComment = false;
+                
+                Console.WriteLine($"\nNEXT LINE: {line.ToUpper()}");
+                LexCharacterByCharacter(line.ToUpper());
             }
 
             Console.WriteLine($"Final comment level (should be 0): {commentLevel}");
@@ -61,12 +46,30 @@ namespace BnfCompiler
 
             foreach(var token in tokenList)
             {
-                Console.WriteLine($"{token.Value} -> {Enum.GetName(typeof(Type), token.Type)}");
+                Console.Write($"{token.Value} -> {Enum.GetName(typeof(Type), token.Type)} ({token.LineIndex}, {token.CharIndex})");
+                Console.WriteLine(GetTypeValue(token));
             }
+            Console.WriteLine("\n\n\n");
 
             for (var i = tokenList.Count - 1; i >= 0; i--)
             {
                 Stack.Push(tokenList[i]);
+            }
+        }
+
+        public string GetTypeValue(Token token)
+        {
+            if (token.Type == Type.KEYWORD)
+            {
+                return $" KEYWORD: {Enum.GetName(typeof(Keyword), token.KeywordValue)}";
+            }
+            else if (token.Type == Type.SPECIAL)
+            {
+                return $" SPECIAL: {Enum.GetName(typeof(Special), token.SpecialValue)}";
+            }
+            else
+            {
+                return "";
             }
         }
 
@@ -95,6 +98,10 @@ namespace BnfCompiler
                 // whitespace
                 type = Type.WHITESPACE;
             }
+            else if (word == "TRUE" || word == "FALSE")
+            {
+                type = Type.BOOL;
+            }
             else if (Keywords.Contains(word))
             {
                 // keyword
@@ -110,17 +117,17 @@ namespace BnfCompiler
                 // string
                 type = Type.STRING;
             }
-            else if (word.StartsWith("\"") && word.EndsWith("\""))
+            else if (word.StartsWith("'") && word.EndsWith("'"))
             {
                 // char
                 type = Type.CHAR;
             }
-            else if (Int32.TryParse(word, out tempInt))
+            else if (Int32.TryParse(word, out tempInt) && !word.Contains("-") && !word.Contains(",") && !word.Contains(" "))
             {
                 // integer
                 type = Type.INTEGER;
             }
-            else if (float.TryParse(word, out tempFloat))
+            else if (float.TryParse(word, out tempFloat) && !word.Contains("-") && !word.Contains(",") && !word.Contains(" "))
             {
                 // float
                 type = Type.FLOAT;
@@ -133,11 +140,19 @@ namespace BnfCompiler
 
             if (createToken)
             {
-                if (type != Type.WHITESPACE && type != Type.UNKNOWN && type != Type.BLOCK_COMMENT && type != Type.LINE_COMMENT && commentLevel == 0)
+                if (type != Type.WHITESPACE && type != Type.UNKNOWN && type != Type.BLOCK_COMMENT && type != Type.LINE_COMMENT && commentLevel == 0 && !isLineComment)
                 {
-                    tokenList.Add(new Token(word, type, 0, 0));
+                    var tokensInLine = tokenList.Where(x => x.LineIndex == currentLine).Select(x => x.Value).ToList();
+                    var str = String.Join("", tokensInLine);
+                    var index = 0;
+                    if (str != "")
+                    {
+                        var line = FileLines[currentLine].Substring(str.Length).ToUpper();
+                        index = line.IndexOf(word) + (str.Length);
+                    }
+                    tokenList.Add(new Token(word, type, currentLine, index)); 
                 }
-
+                
                 Console.WriteLine(Enum.GetName(typeof(Type), type));
             }
 
@@ -146,7 +161,7 @@ namespace BnfCompiler
 
         public bool validIdentifier(string word)
         {
-            string allowableLetters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ_";
+            string allowableLetters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789";
 
             foreach (char c in word)
             {
@@ -161,23 +176,30 @@ namespace BnfCompiler
 
         public void LexCharacterByCharacter(string word)
         {
+            
             var i = word.Length;
             if (i == 0)
             {
                 return;
             }
 
+            Console.WriteLine($"CHECKING: {word.Substring(0, i)}");
             var type = LexWord(word.Substring(0, i));
             while (type == Type.UNKNOWN)
             {
                 if (i - 1 == 0) 
                 {
-                    Console.Write($"Lexing: {word.Substring(0, i)} -> ");
+                    Console.Write($"Lexing (single char): {word.Substring(0, i)} -> ");
                     LexWord(word.Substring(0, i), true);
+                    if (word.Length > 1) 
+                    {
+                        LexCharacterByCharacter(word.Substring(i));
+                    }
                     return;
                 }
 
                 i -= 1;
+                Console.WriteLine($"CHECKING: {word.Substring(0, i)}");
                 type = LexWord(word.Substring(0, i));
             }
 
@@ -188,7 +210,12 @@ namespace BnfCompiler
             {
                 Console.WriteLine($"Comment Level: {commentLevel}");
             }
-
+            else if (type == Type.LINE_COMMENT)
+            {
+                isLineComment = true;
+                return;
+            }
+            
             LexCharacterByCharacter(word.Substring(i));
         }
     }

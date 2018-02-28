@@ -20,17 +20,28 @@ namespace BnfCompiler
             FileLines = fileLines;
         }
 
+        public void AddParseMessage(Token token, string tokenString)
+        {
+            var description = $"Line {token.LineIndex + 1}, Column {token.CharIndex + 1} - Parsed '{tokenString}' token";
+            AddMessage(description, token);
+        }
+
         public void AddWarningMessage(Token token, string message)
         {
             var desciption = $"Line {token.LineIndex + 1}, Column {token.CharIndex + 1} - Warning: {message}";
-            AddParseMessage(desciption, token);
+            AddMessage(desciption, token);
         }
 
         public void AddErrorMessage(Token token, string message)
         {
             Success = false;
             var desciption = $"Line {token.LineIndex + 1}, Column {token.CharIndex + 1} - Error: {message}";
-            AddParseMessage(desciption, token);
+            AddMessage(desciption, token);
+        }
+
+        public void AddPlainWarningMessage(string message)
+        {
+            Messages.Add(message);
         }
 
         public void AddPlainErrorMessage(string message)
@@ -38,10 +49,11 @@ namespace BnfCompiler
             Messages.Add(message);
         }
 
-        public void AddParseMessage(string description, Token token)
+        private void AddMessage(string description, Token token)
         {
             Messages.Add(description);
-            Messages.Add(FileLines[token.LineIndex + 1].Replace('\t', ' '));
+            Console.WriteLine(description);
+            Messages.Add(FileLines[token.LineIndex].Replace('\t', ' '));
             Messages.Add($"{GetFillerString(token.CharIndex, " ")}{GetFillerString(token.Value.Length, "^")}\n");
         }
 
@@ -77,30 +89,28 @@ namespace BnfCompiler
             return _result;
         }
 
-        // calls the functions to parse the program header and program body
-        void ParseProgram()
-        {
-            Console.WriteLine("Parsing: PROGRAM");
-            ParseProgramHeader();
-        }
-
-
-        void ProcessToken()
+        void ProcessToken(string tokenString)
         {
             var token = Stack.Pop();
-            // add token to symbol table
+            _result.AddParseMessage(token, tokenString);
         }
+
+        void ParseProgram()
+        {
+            ParseProgramHeader();
+            ParseProgramBody();
+        }
+
         void ParseProgramHeader()
         {
-            Console.WriteLine("Parsing: PROGRAM HEADER");
             var programToken = Stack.Peek();
-            if (programToken.Type != Type.KEYWORD && programToken.KeywordValue != Keyword.PROGRAM)
+            if (programToken.KeywordValue != Keyword.PROGRAM)
             {
                 _result.AddErrorMessage(programToken, "Expected 'PROGRAM' keyword");
             }
             else
             {
-                ProcessToken();
+                ProcessToken("PROGRAM");
             }
 
             var identifierToken = Stack.Peek();
@@ -110,55 +120,80 @@ namespace BnfCompiler
             }
             else 
             {
-                ProcessToken();
+                ProcessToken("(IDENTIFIER)");
             }
 
-            var isToken = Stack.Pop();
-            if (isToken.Type != Type.KEYWORD && isToken.KeywordValue != Keyword.IS)
+            var isToken = Stack.Peek();
+            if (isToken.KeywordValue != Keyword.IS)
             {
                 _result.AddErrorMessage(isToken, "Expected 'IS' keyword");
+            }
+            else 
+            {
+                ProcessToken("IS");
             }
         }
 
         void ParseProgramBody()
         {
-            Console.WriteLine("Parsing: PROGRAM BODY");
-            var beginToken = Stack.Pop();
-            while (beginToken.Type != Type.KEYWORD && beginToken.KeywordValue != Keyword.BEGIN)
+            var beginToken = Stack.Peek();
+            while (beginToken.KeywordValue != Keyword.BEGIN)
             {
-                Stack.Push(beginToken);
+                _result.AddPlainErrorMessage("Attempting to parse declaration");
                 ParseDeclaration();
-                beginToken = Stack.Pop();
+                beginToken = Stack.Peek();
             }
-
-            var endToken = Stack.Pop();
-            while (endToken.Type != Type.KEYWORD && beginToken.KeywordValue != Keyword.END)
+            if (beginToken.Type != Type.KEYWORD && beginToken.KeywordValue != Keyword.BEGIN)
             {
-                Stack.Push(endToken);
-                ParseStatement();
-                endToken = Stack.Pop();
+                _result.AddErrorMessage(beginToken, "Missing Begin token");
+            }
+            else
+            {
+                ProcessToken("BEGIN");
             }
 
-            var programToken = Stack.Pop();
-            if (programToken.Type != Type.KEYWORD && programToken.KeywordValue != Keyword.PROGRAM)
+            var endToken = Stack.Peek();
+            while (endToken.KeywordValue != Keyword.END)
+            {
+                ParseStatement();
+                endToken = Stack.Peek();
+            }
+
+            ProcessToken("END");
+
+            var programToken = Stack.Peek();
+            if (programToken.KeywordValue != Keyword.PROGRAM)
             {
                 _result.AddErrorMessage(programToken, "Expected 'Program' keyword");
+            }
+            else
+            {
+                ProcessToken("PROGRAM");
+            }
+            
+            Token periodToken = null;
+            Stack.TryPeek(out periodToken);
+            if (periodToken == null || periodToken.SpecialValue != Special.PERIOD)
+            {
+                _result.AddPlainWarningMessage("Expected ending '.'");
+            }
+            else
+            {
+                ProcessToken(".");
             }
         }
 
         void ParseDeclaration()
         {
-            Console.WriteLine("Parsing: DECLARATION");
-
-            var globalToken = Stack.Pop();
-            if (globalToken.Type != Type.KEYWORD && globalToken.KeywordValue != Keyword.GLOBAL)
+            _result.AddPlainErrorMessage("Parsing Declaration");
+            var globalToken = Stack.Peek();
+            if (globalToken.KeywordValue == Keyword.GLOBAL)
             {
-                Stack.Push(globalToken);
+                ProcessToken("GLOBAL");
             }
 
-            var procedureToken = Stack.Pop();
-            Stack.Push(procedureToken);
-            if (procedureToken.Type != Type.KEYWORD && procedureToken.KeywordValue != Keyword.PROCEDURE)
+            var procedureToken = Stack.Peek();
+            if (procedureToken.KeywordValue != Keyword.PROCEDURE)
             {
                 ParseVariableDeclaration();
             }
@@ -167,11 +202,14 @@ namespace BnfCompiler
                 ParseProcedureDeclaration();
             }
 
-            var semicolonToken = Stack.Pop();
-            if (semicolonToken.Type != Type.SPECIAL && semicolonToken.SpecialValue != Special.SEMICOLON)
+            var semicolonToken = Stack.Peek();
+            if (semicolonToken.SpecialValue != Special.SEMICOLON)
             {
                 _result.AddWarningMessage(semicolonToken, "Missing semi-colon");
-                Stack.Push(semicolonToken);
+            }
+            else
+            {
+                ProcessToken(";");
             }
         }
 
@@ -183,169 +221,215 @@ namespace BnfCompiler
 
         void ParseProcedureHeader()
         {
-            var procedureToken = Stack.Pop();
-            if (procedureToken.Type != Type.KEYWORD && procedureToken.KeywordValue != Keyword.PROCEDURE)
+            var procedureToken = Stack.Peek();
+            if (procedureToken.KeywordValue != Keyword.PROCEDURE)
             {
                 _result.AddErrorMessage(procedureToken, "WTF - this should be a 'Procedure' keyword");
             }
+            else
+            {
+                ProcessToken("PROCEDURE");
+            }
 
-            var identifierToken = Stack.Pop();
+            var identifierToken = Stack.Peek();
             if (identifierToken.Type != Type.IDENTIFIER)
             {
                 _result.AddErrorMessage(identifierToken, "Expected identifier");
             }
+            else
+            {
+                ProcessToken("(IDENTIFIER)");
+            }
 
-            var leftParenToken = Stack.Pop();
-            if (leftParenToken.Type != Type.SPECIAL && leftParenToken.SpecialValue != Special.LEFT_PAREN)
+            var leftParenToken = Stack.Peek();
+            if (leftParenToken.SpecialValue != Special.LEFT_PAREN)
             {
                 _result.AddErrorMessage(leftParenToken, "Expected open paren");
             }
-
-            var rightParenToken = Stack.Pop();
-            if (rightParenToken.Type != Type.SPECIAL && rightParenToken.SpecialValue != Special.RIGHT_PAREN)
+            else
             {
-                Stack.Push(rightParenToken);
+                ProcessToken("(");
+            }
+
+            var rightParenToken = Stack.Peek();
+            if (rightParenToken.SpecialValue != Special.RIGHT_PAREN)
+            {
                 ParseParameterList();
             }
 
-            rightParenToken = Stack.Pop();
-            if (rightParenToken.Type != Type.SPECIAL && rightParenToken.SpecialValue != Special.RIGHT_PAREN)
+            rightParenToken = Stack.Peek();
+            if (rightParenToken.SpecialValue != Special.RIGHT_PAREN)
             {
                 _result.AddErrorMessage(rightParenToken, "Expected right paren");
+            }
+            else
+            {
+                ProcessToken(")");
             }
         }
 
         void ParseParameterList()
         {
             ParseParameter();
-            var commaToken = Stack.Pop();
-            if (commaToken.Type == Type.SPECIAL && commaToken.SpecialValue == Special.COMMA)
+            var commaToken = Stack.Peek();
+            if (commaToken.SpecialValue == Special.COMMA)
             {
+                ProcessToken(",");
                 ParseParameterList();
             }
-            else 
-            {
-                Stack.Push(commaToken);
-            }
-
-
         }
 
         void ParseParameter()
         {
             ParseVariableDeclaration();
 
-            var accessToken = Stack.Pop();
-            if (accessToken.Type != Type.KEYWORD && !(accessToken.KeywordValue == Keyword.IN || accessToken.KeywordValue == Keyword.OUT || accessToken.KeywordValue == Keyword.INOUT))
+            var accessToken = Stack.Peek();
+            if (!(accessToken.KeywordValue == Keyword.IN || accessToken.KeywordValue == Keyword.OUT || accessToken.KeywordValue == Keyword.INOUT))
             {
                 _result.AddErrorMessage(accessToken, "Expected access level");
+            }
+            else
+            {
+                ProcessToken("IN | OUT | INOUT");
             }
         }
 
         void ParseProcedureBody()
         {
-            var beginToken = Stack.Pop();
-            while (beginToken.Type != Type.KEYWORD && beginToken.KeywordValue != Keyword.BEGIN)
+            var beginToken = Stack.Peek();
+            while (beginToken.KeywordValue != Keyword.BEGIN)
             {
-                Stack.Push(beginToken);
                 ParseDeclaration();
-                beginToken = Stack.Pop();
+                beginToken = Stack.Peek();
             }
 
-            var endToken = Stack.Pop();
-            while (endToken.Type != Type.KEYWORD && beginToken.KeywordValue != Keyword.END)
+            ProcessToken("BEGIN");
+
+            var endToken = Stack.Peek();
+            while (endToken.KeywordValue != Keyword.END)
             {
-                Stack.Push(endToken);
                 ParseStatement();
-                endToken = Stack.Pop();
+                endToken = Stack.Peek();
             }
 
-            var programToken = Stack.Pop();
-            if (programToken.Type != Type.KEYWORD && programToken.KeywordValue != Keyword.PROCEDURE)
+            ProcessToken("END");
+
+            var procedureToken = Stack.Peek();
+            if (procedureToken.KeywordValue != Keyword.PROCEDURE)
             {
-                _result.AddErrorMessage(programToken, "Expected 'Procedure' keyword");
+                _result.AddErrorMessage(procedureToken, "Expected 'Procedure' keyword");
+            }
+            else
+            {
+                ProcessToken("PROCEDURE");
             }
         }
 
         void ParseVariableDeclaration()
         {
-            var typeMarkToken = Stack.Pop();
-            if (typeMarkToken.Type != Type.KEYWORD && !(typeMarkToken.KeywordValue == Keyword.INTEGER || typeMarkToken.KeywordValue == Keyword.FLOAT || typeMarkToken.KeywordValue == Keyword.STRING || typeMarkToken.KeywordValue == Keyword.BOOL || typeMarkToken.KeywordValue == Keyword.CHAR))
+            var typeMarkToken = Stack.Peek();
+            if (!(typeMarkToken.KeywordValue == Keyword.INTEGER || typeMarkToken.KeywordValue == Keyword.FLOAT || typeMarkToken.KeywordValue == Keyword.STRING || typeMarkToken.KeywordValue == Keyword.BOOL || typeMarkToken.KeywordValue == Keyword.CHAR))
             {
                 _result.AddErrorMessage(typeMarkToken, "Expected type mark");
             }
+            else
+            {
+                ProcessToken("INTEGER | FLOAT | STRING | CHAR | BOOL");
+            }
 
-            var identifierToken = Stack.Pop();
+            var identifierToken = Stack.Peek();
             if (identifierToken.Type != Type.IDENTIFIER)
             {
                 _result.AddErrorMessage(identifierToken, "Expected identifier");
             }
-
-            var leftBracketToken = Stack.Pop();
-            if (leftBracketToken.Type != Type.SPECIAL && leftBracketToken.SpecialValue != Special.LEFT_BRACKET)
+            else
             {
-                Stack.Push(leftBracketToken);
+                ProcessToken("(IDENTIFIER)");
+            }
+
+            var leftBracketToken = Stack.Peek();
+            if (leftBracketToken.SpecialValue != Special.LEFT_BRACKET)
+            {
                 return;
             }
-
-            var negativeToken = Stack.Pop();
-            if (negativeToken.Type != Type.SPECIAL && negativeToken.SpecialValue != Special.NEGATIVE)
+            else
             {
-                Stack.Push(negativeToken);
+                ProcessToken("[");
             }
 
-            var lowerBoundToken = Stack.Pop();
-            if (lowerBoundToken.Type != Type.INTEGER)
+            var negativeToken = Stack.Peek();
+            if (negativeToken.SpecialValue == Special.NEGATIVE)
+            {
+                ProcessToken("-");
+            }
+
+            var lowerBoundToken = Stack.Peek();
+            if (lowerBoundToken.Type != Type.FLOAT && lowerBoundToken.Type != Type.INTEGER)
             {
                 _result.AddErrorMessage(lowerBoundToken, "Expected integer");
             }
+            else
+            {
+                ProcessToken("Array Lower Bound");
+            }
 
-            var colonToken = Stack.Pop();
-            if (colonToken.Type != Type.SPECIAL && colonToken.SpecialValue != Special.COLON)
+            var colonToken = Stack.Peek();
+            if (colonToken.SpecialValue != Special.COLON)
             {
                 _result.AddErrorMessage(colonToken, "Expected colon");
             }
-
-            negativeToken = Stack.Pop();
-            if (negativeToken.Type != Type.SPECIAL && negativeToken.SpecialValue != Special.NEGATIVE)
+            else
             {
-                Stack.Push(negativeToken);
+                ProcessToken(":");
             }
 
-            var upperBoundToken = Stack.Pop();
-            if (upperBoundToken.Type != Type.INTEGER)
+            negativeToken = Stack.Peek();
+            if (negativeToken.SpecialValue == Special.NEGATIVE)
+            {
+                ProcessToken("-");
+            }
+
+            var upperBoundToken = Stack.Peek();
+            if (upperBoundToken.Type != Type.INTEGER && upperBoundToken.Type != Type.FLOAT)
             {
                 _result.AddErrorMessage(upperBoundToken, "Expected integer");
             }
+            else
+            {
+                ProcessToken("Array Upper Bound");
+            }
 
-            var rightBracketToken = Stack.Pop();
-            if (rightBracketToken.Type != Type.SPECIAL && rightBracketToken.SpecialValue != Special.RIGHT_BRACKET)
+            var rightBracketToken = Stack.Peek();
+            if (rightBracketToken.SpecialValue != Special.RIGHT_BRACKET)
             {
                 _result.AddErrorMessage(rightBracketToken, "Expected right bracket token");
+            }
+            else
+            {
+                ProcessToken("]");
             }
         }
 
         void ParseStatement()
         {
-            var token = Stack.Pop();
-            if (token.Type == Type.KEYWORD && token.KeywordValue == Keyword.RETURN)
+            var token = Stack.Peek();
+            if (token.KeywordValue == Keyword.RETURN)
             {
-                // do nothing
+                ProcessToken("RETURN");
             }
-            else if (token.Type == Type.KEYWORD && token.KeywordValue == Keyword.IF)
+            else if (token.KeywordValue == Keyword.IF)
             {
-                Stack.Push(token);
                 ParseIfStatement();
             }
-            else if (token.Type == Type.KEYWORD && token.KeywordValue == Keyword.FOR)
+            else if (token.KeywordValue == Keyword.FOR)
             {
-                Stack.Push(token);
                 ParseLoopStatement();
             }
             else if (token.Type == Type.IDENTIFIER) 
             {
+                token = Stack.Pop();
                 var nextToken = Stack.Peek();
-                if (nextToken.Type == Type.SPECIAL && nextToken.SpecialValue == Special.LEFT_PAREN)
+                if (nextToken.SpecialValue == Special.LEFT_PAREN)
                 {
                     // procedure call 
                     Stack.Push(token);
@@ -358,34 +442,49 @@ namespace BnfCompiler
                 }
             }
 
-            var semicolonToken = Stack.Pop();
-            if (semicolonToken.Type != Type.SPECIAL && semicolonToken.SpecialValue != Special.SEMICOLON)
+            var semicolonToken = Stack.Peek();
+            if (semicolonToken.SpecialValue != Special.SEMICOLON)
             {
                 _result.AddWarningMessage(semicolonToken, "Missing semi colon");
-                Stack.Push(semicolonToken);
+            }
+            else
+            {
+                ProcessToken(";");
             }
         }
 
         void ParseProcedureCall()
         {
-            var identifierToken = Stack.Pop();
+            var identifierToken = Stack.Peek();
             if (identifierToken.Type != Type.IDENTIFIER) 
             {
                 _result.AddErrorMessage(identifierToken, "Expected Identifier token");
             }
+            else
+            {
+                ProcessToken("IDENTIFIER");
+            }
 
-            var leftParenToken = Stack.Pop();
-            if (leftParenToken.Type != Type.SPECIAL && leftParenToken.SpecialValue != Special.LEFT_PAREN)
+            var leftParenToken = Stack.Peek();
+            if (leftParenToken.SpecialValue != Special.LEFT_PAREN)
             {
                 _result.AddErrorMessage(leftParenToken, "Expected left paren token");
+            }
+            else
+            {
+                ProcessToken("(");
             }
 
             ParseArgumentList();
 
-            var rightParenToken = Stack.Pop();
-            if (rightParenToken.Type != Type.SPECIAL && rightParenToken.SpecialValue != Special.RIGHT_PAREN)
+            var rightParenToken = Stack.Peek();
+            if (rightParenToken.SpecialValue != Special.RIGHT_PAREN)
             {
                 _result.AddErrorMessage(rightParenToken, "Expected right paren token");
+            }
+            else
+            {
+                ProcessToken(")");
             }
         }
 
@@ -393,10 +492,14 @@ namespace BnfCompiler
         {
             ParseDestination();
 
-            var equalsToken = Stack.Pop();
-            if (equalsToken.Type != Type.SPECIAL && equalsToken.SpecialValue != Special.EQUALS)
+            var equalsToken = Stack.Peek();
+            if (equalsToken.SpecialValue != Special.EQUALS)
             {
                 _result.AddErrorMessage(equalsToken, "Expected equals token");
+            }
+            else
+            {
+                ProcessToken(":=");
             }
 
             ParseExpression();
@@ -404,131 +507,186 @@ namespace BnfCompiler
 
         void ParseDestination()
         {
-            var identifierToken = Stack.Pop();
+            var identifierToken = Stack.Peek();
             if (identifierToken.Type != Type.IDENTIFIER)
             {
                 _result.AddErrorMessage(identifierToken, "Expected identifier token");
             }
-
-            var leftBracketToken = Stack.Pop();
-            if (leftBracketToken.Type != Type.SPECIAL && leftBracketToken.SpecialValue != Special.LEFT_BRACKET)
+            else
             {
-                Stack.Push(leftBracketToken);
+                ProcessToken("(IDENTIFIER)");
+            }
+
+            var leftBracketToken = Stack.Peek();
+            if (leftBracketToken.SpecialValue != Special.LEFT_BRACKET)
+            {
                 return;
+            }
+            else
+            {
+                ProcessToken("[");
             }
 
             ParseExpression();
 
-            var rightBracketToken = Stack.Pop();
-            if (rightBracketToken.Type != Type.SPECIAL && rightBracketToken.SpecialValue != Special.RIGHT_BRACKET)
+            var rightBracketToken = Stack.Peek();
+            if (rightBracketToken.SpecialValue != Special.RIGHT_BRACKET)
             {
                 _result.AddErrorMessage(rightBracketToken, "Expected right bracket token");
+            }
+            else
+            {
+                ProcessToken("]");
             }
         }
 
         void ParseIfStatement()
         {
-            var ifToken = Stack.Pop();
-            if (ifToken.Type != Type.KEYWORD && ifToken.KeywordValue != Keyword.IF)
+            var ifToken = Stack.Peek();
+            if (ifToken.KeywordValue != Keyword.IF)
             {
                 _result.AddErrorMessage(ifToken, "WTF? this should be an if token");
             }
+            else
+            {
+                ProcessToken("IF");
+            }
 
-            var leftParenToken = Stack.Pop();
-            if (leftParenToken.Type != Type.SPECIAL && leftParenToken.SpecialValue != Special.LEFT_PAREN)
+            var leftParenToken = Stack.Peek();
+            if (leftParenToken.SpecialValue != Special.LEFT_PAREN)
             {
                 _result.AddErrorMessage(leftParenToken, "Expected left paren token");
+            }
+            else
+            {
+                ProcessToken("(");
             }
 
             ParseExpression();
 
-            var rightParenToken = Stack.Pop();
-            if (rightParenToken.Type != Type.SPECIAL && rightParenToken.SpecialValue != Special.RIGHT_PAREN)
+            var rightParenToken = Stack.Peek();
+            if (rightParenToken.SpecialValue != Special.RIGHT_PAREN)
             {
                 _result.AddErrorMessage(rightParenToken, "Expected right paren token");
             }
+            else
+            {
+                ProcessToken(")");
+            }
 
-            var thenToken = Stack.Pop();
-            if (thenToken.Type != Type.KEYWORD && thenToken.KeywordValue != Keyword.THEN)
+            var thenToken = Stack.Peek();
+            if (thenToken.KeywordValue != Keyword.THEN)
             {
                 _result.AddErrorMessage(thenToken, "Expected 'then' token");
             }
+            else
+            {
+                ProcessToken("THEN");
+            }
 
-            var endElseToken = Stack.Pop();
-            while (endElseToken.Type != Type.KEYWORD && !(endElseToken.KeywordValue == Keyword.END || endElseToken.KeywordValue == Keyword.ELSE))
+            var endElseToken = Stack.Peek();
+            while (!(endElseToken.KeywordValue == Keyword.END || endElseToken.KeywordValue == Keyword.ELSE))
             {
                 ParseStatement();
-                endElseToken = Stack.Pop();
+                endElseToken = Stack.Peek();
             }
 
             if (endElseToken.KeywordValue == Keyword.ELSE)
             {
-                while (endElseToken.Type != Type.KEYWORD && endElseToken.KeywordValue != Keyword.END)
+                ProcessToken("ELSE");
+
+                while (endElseToken.KeywordValue != Keyword.END)
                 {
                     ParseStatement();
-                    endElseToken = Stack.Pop();
+                    endElseToken = Stack.Peek();
                 }
             }
 
-            ifToken = Stack.Pop();
-            if (ifToken.Type != Type.KEYWORD && ifToken.KeywordValue != Keyword.IF)
+            ProcessToken("END");
+            
+            ifToken = Stack.Peek();
+            if (ifToken.KeywordValue != Keyword.IF)
             {
                 _result.AddErrorMessage(ifToken, "Missing end if token");
+            }
+            else
+            {
+                ProcessToken("IF");
             }
         }
 
         void ParseLoopStatement()
         {
-            var forToken = Stack.Pop();
-            if (forToken.Type != Type.KEYWORD && forToken.KeywordValue != Keyword.FOR)
+            var forToken = Stack.Peek();
+            if (forToken.KeywordValue != Keyword.FOR)
             {
                 _result.AddErrorMessage(forToken, "WTF? This should be a for token");
             }
+            else
+            {
+                ProcessToken("FOR");
+            }
 
-            var leftParenToken = Stack.Pop();
-            if (leftParenToken.Type != Type.SPECIAL && leftParenToken.SpecialValue != Special.LEFT_PAREN)
+            var leftParenToken = Stack.Peek();
+            if (leftParenToken.SpecialValue != Special.LEFT_PAREN)
             {
                 _result.AddErrorMessage(leftParenToken, "Expected left paren token");
+            }
+            else
+            {
+                ProcessToken("(");
             }
 
             ParseAssignment();
 
-            var semicolonToken = Stack.Pop();
-            if (semicolonToken.Type != Type.SPECIAL && semicolonToken.SpecialValue != Special.SEMICOLON)
+            var semicolonToken = Stack.Peek();
+            if (semicolonToken.SpecialValue != Special.SEMICOLON)
             {
-                _result.AddWarningMessage(semicolonToken, "Missing semi colon");
-                Stack.Push(semicolonToken);
+                _result.AddErrorMessage(semicolonToken, "Missing semi colon");
+            }
+            else
+            {
+                ProcessToken(";");
             }
 
             ParseExpression();
 
-            var rightParenToken = Stack.Pop();
-            if (rightParenToken.Type != Type.SPECIAL && rightParenToken.SpecialValue != Special.RIGHT_BRACKET)
+            var rightParenToken = Stack.Peek();
+            if (rightParenToken.SpecialValue != Special.RIGHT_PAREN)
             {
-                _result.AddErrorMessage(rightParenToken, "Expected right bracket token");
+                _result.AddErrorMessage(rightParenToken, "Expected right paren token");
+            }
+            else
+            {
+                ProcessToken(")");
             }
 
-            var endToken = Stack.Pop();
-            while (endToken.Type != Type.KEYWORD && endToken.KeywordValue != Keyword.END)
+            var endToken = Stack.Peek();
+            while (endToken.KeywordValue != Keyword.END)
             {
                 ParseStatement();
-                endToken = Stack.Pop();
+                endToken = Stack.Peek();
             }
 
-            forToken = Stack.Pop();
-            if (forToken.Type != Type.KEYWORD && forToken.KeywordValue != Keyword.FOR)
+            ProcessToken("END");
+
+            forToken = Stack.Peek();
+            if (forToken.KeywordValue != Keyword.FOR)
             {
                 _result.AddErrorMessage(forToken, "Missing ending for token");
             } 
+            else
+            {
+                ProcessToken("FOR");
+            }
         }
 
         void ParseExpression()
         {
-            var negativeToken = Stack.Pop();
-            if (negativeToken.Type != Type.KEYWORD && negativeToken.KeywordValue != Keyword.NOT)
+            var negativeToken = Stack.Peek();
+            if (negativeToken.KeywordValue == Keyword.NOT)
             {
-                Stack.Push(negativeToken);
-                return;
+                ProcessToken("NOT");
             }
 
             ParseArithOp();
@@ -538,102 +696,117 @@ namespace BnfCompiler
         {
             ParseRelation();
 
-            var andOrToken = Stack.Pop();
-            if (andOrToken.Type != Type.SPECIAL && !(andOrToken.SpecialValue == Special.AND || andOrToken.SpecialValue == Special.OR))
+            var andOrToken = Stack.Peek();
+            if (!(andOrToken.SpecialValue == Special.AND || andOrToken.SpecialValue == Special.OR))
             {
-                Stack.Push(andOrToken);
                 return;
             }
+            else
+            {
+                ProcessToken("& | (|)");
+            }
 
-            ParseRelation();
+            ParseArithOp();
         }
 
         void ParseRelation()
         {
             ParseTerm();
 
-            var plusNegToken = Stack.Pop();
-            if (plusNegToken.Type != Type.SPECIAL && !(plusNegToken.SpecialValue == Special.PLUS || plusNegToken.SpecialValue == Special.NEGATIVE))
+            var plusNegToken = Stack.Peek();
+            if (!(plusNegToken.SpecialValue == Special.PLUS || plusNegToken.SpecialValue == Special.NEGATIVE))
             {
-                Stack.Push(plusNegToken);
                 return;
             }
+            else
+            {
+                ProcessToken("+ | -");
+            }
 
-            ParseTerm();
+            ParseRelation();
         }
 
         void ParseTerm()
         {
             ParseFactor();
 
-            var relationToken = Stack.Pop();
-            if (relationToken.Type != Type.SPECIAL && !(relationToken.SpecialValue == Special.LESS_THAN || relationToken.SpecialValue == Special.LESS_THAN_OR_EQUAL || relationToken.SpecialValue == Special.GREATER_THAN || relationToken.SpecialValue == Special.GREATER_THAN_OR_EQUAL || relationToken.SpecialValue == Special.DOUBLE_EQUALS || relationToken.SpecialValue == Special.NOT_EQUAL))
+            var relationToken = Stack.Peek();
+            if (!(relationToken.SpecialValue == Special.LESS_THAN || relationToken.SpecialValue == Special.LESS_THAN_OR_EQUAL || relationToken.SpecialValue == Special.GREATER_THAN || relationToken.SpecialValue == Special.GREATER_THAN_OR_EQUAL || relationToken.SpecialValue == Special.DOUBLE_EQUALS || relationToken.SpecialValue == Special.NOT_EQUAL))
             {
-                Stack.Push(relationToken);
                 return;
             }
+            else
+            {
+                ProcessToken("RELATION OPERATOR");
+            }
 
-            ParseFactor();
+            ParseTerm();
         }
 
         void ParseFactor()
         {
             ParseWord();
 
-            var multDivToken = Stack.Pop();
-            if (multDivToken.Type != Type.SPECIAL && !(multDivToken.SpecialValue == Special.MULTIPLY || multDivToken.SpecialValue == Special.DIVIDE))
+            var multDivToken = Stack.Peek();
+            if (!(multDivToken.SpecialValue == Special.MULTIPLY || multDivToken.SpecialValue == Special.DIVIDE))
             {
-                Stack.Push(multDivToken);
                 return;
             }
+            else
+            {
+                ProcessToken("* | /");
+            }
 
-            ParseWord();
+            ParseFactor();
         }
 
         void ParseWord()
         {
-            var token = Stack.Pop();
-            if (token.Type == Type.SPECIAL && token.SpecialValue == Special.LEFT_PAREN)
+            var token = Stack.Peek();
+            if (token.SpecialValue == Special.LEFT_PAREN)
             {
+                ProcessToken("(");
+                
                 ParseExpression();
 
-                var rightParenToken = Stack.Pop();
-                if (rightParenToken.Type != Type.SPECIAL && rightParenToken.SpecialValue != Special.RIGHT_BRACKET)
+                var rightParenToken = Stack.Peek();
+                if (rightParenToken.SpecialValue != Special.RIGHT_PAREN)
                 {
-                    _result.AddErrorMessage(rightParenToken, "Expected right bracket token");
+                    _result.AddErrorMessage(rightParenToken, "Expected right paren token");
+                }
+                else
+                {
+                    ProcessToken(")");
                 }
             }
             else if (token.Type == Type.STRING)
             {
-                // do nothing
+                ProcessToken("STRING");
             }
             else if (token.Type == Type.CHAR)
             {
-                // do nothing
+                ProcessToken("CHAR");
             }
-            else if (token.Type == Type.KEYWORD && token.KeywordValue == Keyword.TRUE)
+            else if (token.Type == Type.BOOL)
             {
-                // do nothing
+                ProcessToken("TRUE | FALSE");
             }
-            else if (token.Type == Type.KEYWORD && token.KeywordValue == Keyword.FALSE)
+            else if (token.Type == Type.FLOAT || token.Type == Type.INTEGER)
             {
-                // do nothing
-            }
-            else if (token.Type == Type.INTEGER || token.Type == Type.FLOAT)
-            {
-                // do nothing
+                ProcessToken("INTEGER | FLOAT");
             }
             else if (token.Type == Type.IDENTIFIER)
             {
-                Stack.Push(token);
                 ParseName();
             }
-            else if (token.Type == Type.SPECIAL && token.SpecialValue == Special.NEGATIVE)
+            else if (token.SpecialValue == Special.NEGATIVE)
             {
-                var nextToken = Stack.Pop();
+                ProcessToken("-");
+                var nextToken = Stack.Peek();
                 if (nextToken.Type == Type.INTEGER || nextToken.Type == Type.FLOAT)
                 {
                     // do nothing
+                    ProcessToken("INTEGER | FLOAT");
                 }
                 else
                 {
@@ -648,47 +821,54 @@ namespace BnfCompiler
 
         void ParseName()
         {
-            var identifierToken = Stack.Pop();
+            var identifierToken = Stack.Peek();
             if (identifierToken.Type != Type.IDENTIFIER)
             {
                 _result.AddErrorMessage(identifierToken, "Expected identifier token");
             }
-
-            var leftParenToken = Stack.Pop();
-            if (leftParenToken.Type != Type.SPECIAL && leftParenToken.SpecialValue != Special.LEFT_PAREN)
+            else
             {
-                Stack.Push(leftParenToken);
+                ProcessToken("IDENTIFIER");
+            }
+
+            var leftBracketToken = Stack.Peek();
+            if (leftBracketToken.SpecialValue != Special.LEFT_BRACKET)
+            {
                 return;
+            }
+            else
+            {
+                ProcessToken("[");
             }
 
             ParseExpression();
 
-            var rightParenToken = Stack.Pop();
-            if (rightParenToken.Type != Type.SPECIAL && rightParenToken.SpecialValue != Special.RIGHT_PAREN)
+            var rightBracketToken = Stack.Peek();
+            if (rightBracketToken.SpecialValue != Special.RIGHT_BRACKET)
             {
-                _result.AddErrorMessage(rightParenToken, "Expected right paren token");
+                _result.AddErrorMessage(rightBracketToken, "Expected right paren token");
+            }
+            else
+            {
+                ProcessToken("]");
             }
         }
 
         void ParseArgumentList()
         {
-            var token = Stack.Pop();
-            if (token.Type != Type.SPECIAL && token.SpecialValue != Special.RIGHT_PAREN)
+            var token = Stack.Peek();
+            if (token.SpecialValue == Special.RIGHT_PAREN)
             {
-                Stack.Push(token);
                 return;
             }
 
             ParseExpression();
 
-            token = Stack.Pop();
-            if (token.Type != Type.SPECIAL && token.SpecialValue != Special.COMMA)
+            token = Stack.Peek();
+            if (token.SpecialValue == Special.COMMA)
             {
+                ProcessToken(",");
                 ParseArgumentList();
-            }
-            else  
-            {
-                Stack.Push(token);
             }
         }
     }

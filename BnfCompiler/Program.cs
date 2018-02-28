@@ -68,16 +68,15 @@ namespace BnfCompiler
 
             if (scannerOnly)
             {
-                Console.WriteLine("Token List:");
-                var nullString = "(null)";
-                var emptyString = "";
                 var scanner = new Scanner(file);
-                var result = scanner.Stack.Pop();
-                while (result != null)
+                Console.WriteLine("\n\n\nToken List:");
+                while (scanner.Stack.Count != 0)
                 {
-                    var nullValue = result.Value == null ? nullString : emptyString;
-                    Console.WriteLine($"({result.LineIndex}, {result.CharIndex}) {result.Value} {nullValue}");
-                    result = scanner.Stack.Pop();
+                    var token = scanner.Stack.Pop();
+                    Console.WriteLine($"Token: '{token.Value}' ({Enum.GetName(typeof(Type), token.Type)})");
+                    Console.WriteLine($"Line {token.LineIndex + 1}, Column {token.CharIndex + 1}");
+                    Console.WriteLine(scanner.FileLines[token.LineIndex]);
+                    Console.WriteLine($"{GetFillerString(token.CharIndex, " ")}{GetFillerString(token.Value.Length, "^")}\n");
                 }
             }
             else
@@ -85,6 +84,7 @@ namespace BnfCompiler
                 var parser = new Parser(file);
                 var result = parser.Parse();
 
+                Console.WriteLine("\n\n\nParse Results:");
                 foreach (var line in result.Messages)
                 {
                     Console.WriteLine(line);
@@ -110,6 +110,16 @@ namespace BnfCompiler
             }
 
             return ArgumentType.Other;
+        }
+
+        static string GetFillerString(int length, string filler)
+        {
+            var str = "";
+            for (int i = 0; i < length; i++)
+            {
+                str += filler;
+            }
+            return str;
         }
     }
 }

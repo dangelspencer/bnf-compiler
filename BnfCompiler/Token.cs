@@ -8,12 +8,14 @@ namespace BnfCompiler
         FLOAT,
         STRING,
         CHAR,
+        BOOL,
         KEYWORD,
         SPECIAL,
         UNKNOWN,
         WHITESPACE,
         BLOCK_COMMENT,
-        LINE_COMMENT
+        LINE_COMMENT,
+        MULTI_TOKEN
     }
 
     public enum Keyword
@@ -39,7 +41,8 @@ namespace BnfCompiler
         ELSE,
         FOR,
         RETURN,
-        NOT
+        NOT,
+        DEFAULT
     }
 
     public enum Special
@@ -67,7 +70,8 @@ namespace BnfCompiler
         NEGATIVE,
         PLUS,
         EXCLAMATION,
-        NOT_EQUAL
+        NOT_EQUAL,
+        DEFAULT
     }
 
     public class Token
@@ -77,12 +81,28 @@ namespace BnfCompiler
             Value = value;
             Type = type;
             LineIndex = lineIndex;
-            CharIndex = charIndex - (Value.Length - 1); //since the char index is the index of the last character in the token and we want the index of the first character
+            CharIndex = charIndex;
 
-            if (Type == Type.IDENTIFIER || Type == Type.SPECIAL || Type == Type.UNKNOWN)
+            if (Type == Type.KEYWORD)
             {
                 SetKeywordValue();
+                SpecialValue = Special.DEFAULT;
+            }
+            else if (Type == Type.SPECIAL)
+            {
                 SetSpecialValue();
+                KeywordValue = Keyword.DEFAULT;
+            }
+            if (Type == Type.BOOL)
+            {
+                if (Value == "TRUE")
+                {
+                    BoolValue = true;
+                }
+                else
+                {
+                    BoolValue = false;
+                }
             }
         }
 

@@ -1,12 +1,12 @@
 ﻿<Properties StartupConfiguration="{6AA83C50-7151-4E11-8B4C-1BD4FACF4AA7}|Default">
   <MonoDevelop.Ide.ItemProperties.BnfCompiler PreferredExecutionTarget="MonoDevelop.Default" />
-  <MonoDevelop.Ide.Workbench ActiveDocument="BnfCompiler/Parser.cs">
+  <MonoDevelop.Ide.Workbench ActiveDocument="BnfCompiler/Scanner.cs">
     <Files>
       <File FileName="BnfCompiler/Program.cs" Line="47" Column="1" />
       <File FileName="BnfCompiler/SymbolTable.cs" Line="29" Column="2" />
-      <File FileName="BnfCompiler/Scanner.cs" Line="18" Column="13" />
+      <File FileName="BnfCompiler/Scanner.cs" Line="149" Column="108" />
       <File FileName="BnfCompiler/Parser.cs" Line="156" Column="41" />
-      <File FileName="BnfCompiler/Token.cs" Line="25" Column="31" />
+      <File FileName="BnfCompiler/Token.cs" Line="25" Column="16" />
     </Files>
   </MonoDevelop.Ide.Workbench>
   <MonoDevelop.Ide.Workspace ActiveConfiguration="Debug" />
