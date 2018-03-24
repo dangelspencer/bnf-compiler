@@ -9,7 +9,11 @@ namespace BnfCompiler
     {
         private List<string> Keywords = new List<string>() { "PROGRAM", "IS", "BEGIN", "END", "GLOBAL", "PROCEDURE", "IN", "OUT", "INOUT", "INTEGER", "FLOAT", "STRING", "CHAR", "BOOL", "IF", "THEN", "ELSE", "FOR", "RETURN", "NOT" };
         private List<string> Specials = new List<string>() { ";", "\"", "'", "[", "]", ".", "(", ")", ",", ":", ":=", "==", "&", "|", "<", "<=", ">", ">=", "!=", "*", "/", "-", "+" };
+        private List<char> AllowedSpecialCharacters = new List<char>() { ' ', '_', ',', ';', ':', '.', ',', '\'' };
         public List<string> FileLines = new List<string>();
+
+        public List<string> errors;
+        public List<Token> errorTokens;
 
         private List<Token> tokenList;
         private int commentLevel = 0;
@@ -19,6 +23,8 @@ namespace BnfCompiler
         public Stack<Token> Stack;
         public Scanner(string file)
         {
+            errors = new List<string>();
+            errorTokens = new List<Token>();
             FileStream fileStream = new FileStream(file, FileMode.Open);
             var _reader = new StreamReader(fileStream);
             Stack = new Stack<Token>();
@@ -75,6 +81,8 @@ namespace BnfCompiler
 
         public Type LexWord(string word, bool createToken = false)
         {
+            var error = false;
+            var errorDescription = "";
             float tempFloat = 0;
             int tempInt = 0;
             var type = Type.UNKNOWN;
@@ -116,11 +124,32 @@ namespace BnfCompiler
             {
                 // string
                 type = Type.STRING;
+                word = word.Replace("\"", "");
+                foreach (var character in word)
+                {
+                    if (!error && !char.IsLetterOrDigit(character) && !AllowedSpecialCharacters.Contains(character))
+                    {
+                        errorDescription = "Invalid string";
+                        error = true;
+                    }
+                }
             }
             else if (word.StartsWith("'") && word.EndsWith("'"))
             {
                 // char
+                word = word.Replace("'", "");
                 type = Type.CHAR;
+                char character = 'a';
+                if (!char.TryParse(word, out character))
+                {
+                    errorDescription = "Invalid char";
+                    error = true;
+                }
+                else if (!char.IsLetterOrDigit(character) && !AllowedSpecialCharacters.Contains(character))
+                {
+                    errorDescription = "Invalid char";
+                    error = true;
+                }
             }
             else if (Int32.TryParse(word, out tempInt) && !word.Contains("-") && !word.Contains(",") && !word.Contains(" "))
             {
@@ -150,7 +179,15 @@ namespace BnfCompiler
                         var line = FileLines[currentLine].Substring(str.Length).ToUpper();
                         index = line.IndexOf(word) + (str.Length);
                     }
-                    tokenList.Add(new Token(word, type, currentLine, index)); 
+                    var token = new Token(word, type, currentLine, index);
+
+                    if (error)
+                    {
+                        errors.Add(errorDescription);
+                        errorTokens.Add(token);
+                    }
+
+                    tokenList.Add(token); 
                 }
                 
                 Console.WriteLine(Enum.GetName(typeof(Type), type));

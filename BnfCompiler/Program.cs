@@ -90,8 +90,19 @@ namespace BnfCompiler
                     Console.WriteLine(line);
                 }
 
+                Console.WriteLine("\n\n\nSymbol Table Contents:");
+                parser._table.PrintSymbols();
+
                 var parseStatus = result.Success ? "Success" : "Failed";
-                Console.WriteLine($"\nParse Result: {parseStatus}");
+                Console.WriteLine($"\n\n\n\nParse Result: {parseStatus}");
+
+                if(!result.Success) 
+                {
+                    foreach (var line in result.ErrorMessages)
+                    {
+                        Console.WriteLine(line);
+                    }
+                }            
             }
 
             return 0;

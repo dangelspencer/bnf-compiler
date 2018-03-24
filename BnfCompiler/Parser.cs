@@ -12,14 +12,20 @@ namespace BnfCompiler
     {
         public bool Success = true;
         public List<string> Messages;
+        public List<string> ErrorMessages;
         private List<string> FileLines;
 
         public ParserResult(List<string> fileLines)
         {
             Messages = new List<string>();
+            ErrorMessages = new List<string>();
             FileLines = fileLines;
         }
 
+        public void AddPlainMessage(Token token, string description)
+        {
+            AddMessage(description, token);
+        }
         public void AddParseMessage(Token token, string tokenString)
         {
             var description = $"Line {token.LineIndex + 1}, Column {token.CharIndex + 1} - Parsed '{tokenString}' token";
@@ -37,6 +43,7 @@ namespace BnfCompiler
             Success = false;
             var desciption = $"Line {token.LineIndex + 1}, Column {token.CharIndex + 1} - Error: {message}";
             AddMessage(desciption, token);
+            AddMessageToErrorList(desciption, token);
         }
 
         public void AddPlainWarningMessage(string message)
@@ -57,6 +64,13 @@ namespace BnfCompiler
             Messages.Add($"{GetFillerString(token.CharIndex, " ")}{GetFillerString(token.Value.Length, "^")}\n");
         }
 
+        private void AddMessageToErrorList(string description, Token token)
+        {
+            ErrorMessages.Add(description);
+            ErrorMessages.Add(FileLines[token.LineIndex].Replace('\t', ' '));
+            ErrorMessages.Add($"{GetFillerString(token.CharIndex, " ")}{GetFillerString(token.Value.Length, "^")}\n");
+        }
+
         private string GetFillerString(int length, string filler)
         {
             var str = "";
@@ -73,6 +87,7 @@ namespace BnfCompiler
         private Scanner _scanner;
         private List<string> ValidTypeMarks = new List<string> { "INTEGER", "FLOAT", "STRING", "BOOL", "CHAR" };
         private ParserResult _result;
+        public SymbolTable _table;
 
         private Stack<Token> Stack;
 
@@ -81,6 +96,12 @@ namespace BnfCompiler
             _scanner = new Scanner(file);
             _result = new ParserResult(_scanner.FileLines);
             Stack = _scanner.Stack;
+
+
+            for (var i = 0; i < _scanner.errors.Count; i++)
+            {
+                _result.AddErrorMessage(_scanner.errorTokens[i], _scanner.errors[i]);
+            }
         }
 
         public ParserResult Parse()
@@ -118,8 +139,9 @@ namespace BnfCompiler
             {
                 _result.AddErrorMessage(identifierToken, "Expected identifier");
             }
-            else 
+            else
             {
+                _table = new SymbolTable(identifierToken);
                 ProcessToken("(IDENTIFIER)");
             }
 
@@ -128,7 +150,7 @@ namespace BnfCompiler
             {
                 _result.AddErrorMessage(isToken, "Expected 'IS' keyword");
             }
-            else 
+            else
             {
                 ProcessToken("IS");
             }
@@ -139,7 +161,6 @@ namespace BnfCompiler
             var beginToken = Stack.Peek();
             while (beginToken.KeywordValue != Keyword.BEGIN)
             {
-                _result.AddPlainErrorMessage("Attempting to parse declaration");
                 ParseDeclaration();
                 beginToken = Stack.Peek();
             }
@@ -170,7 +191,7 @@ namespace BnfCompiler
             {
                 ProcessToken("PROGRAM");
             }
-            
+
             Token periodToken = null;
             Stack.TryPeek(out periodToken);
             if (periodToken == null || periodToken.SpecialValue != Special.PERIOD)
@@ -185,14 +206,15 @@ namespace BnfCompiler
 
         void ParseDeclaration()
         {
-            _result.AddPlainErrorMessage("Parsing Declaration");
-            var globalToken = Stack.Peek();
-            if (globalToken.KeywordValue == Keyword.GLOBAL)
-            {
-                ProcessToken("GLOBAL");
-            }
-
+            var globalToken = Stack.Pop();
             var procedureToken = Stack.Peek();
+            if (globalToken.KeywordValue != Keyword.GLOBAL)
+            {
+                procedureToken = globalToken;
+            }
+            Stack.Push(globalToken);
+            
+
             if (procedureToken.KeywordValue != Keyword.PROCEDURE)
             {
                 ParseVariableDeclaration();
@@ -221,6 +243,16 @@ namespace BnfCompiler
 
         void ParseProcedureHeader()
         {
+            var globalToken = Stack.Peek();
+            if (globalToken.KeywordValue == Keyword.GLOBAL)
+            {
+                ProcessToken("GLOBAL");
+                if (_table._currentScope != 0)
+                {
+                    _result.AddErrorMessage(globalToken, "Global declaration cannot be made here");
+                }
+            }
+
             var procedureToken = Stack.Peek();
             if (procedureToken.KeywordValue != Keyword.PROCEDURE)
             {
@@ -239,7 +271,14 @@ namespace BnfCompiler
             else
             {
                 ProcessToken("(IDENTIFIER)");
+                if (_table.HasSymbol(identifierToken.Value))
+                {
+                    // throw new symbol already defined error
+                    _result.AddErrorMessage(identifierToken, "Procedure is already defined");
+                }
             }
+
+            
 
             var leftParenToken = Stack.Peek();
             if (leftParenToken.SpecialValue != Special.LEFT_PAREN)
@@ -250,12 +289,24 @@ namespace BnfCompiler
             {
                 ProcessToken("(");
             }
+            
+            var variableTypes = new List<VariableType>();
+
 
             var rightParenToken = Stack.Peek();
             if (rightParenToken.SpecialValue != Special.RIGHT_PAREN)
             {
-                ParseParameterList();
+                ParseParameterList(variableTypes);
             }
+
+            _table.InsertProcedureSymbol(identifierToken, variableTypes);
+            //TODO throw error if global is present outside of the global scope? Or add the procedure / variable to the global scope?
+            _table.EnterScope();
+            _table.InsertProcedureSymbol(identifierToken, variableTypes); // so we have access to the current procedure on the new scope for recursion
+
+            
+
+
 
             rightParenToken = Stack.Peek();
             if (rightParenToken.SpecialValue != Special.RIGHT_PAREN)
@@ -268,20 +319,20 @@ namespace BnfCompiler
             }
         }
 
-        void ParseParameterList()
+        void ParseParameterList(List<VariableType> parameterTypes)
         {
-            ParseParameter();
+            ParseParameter(parameterTypes);
             var commaToken = Stack.Peek();
             if (commaToken.SpecialValue == Special.COMMA)
             {
                 ProcessToken(",");
-                ParseParameterList();
+                ParseParameterList(parameterTypes);
             }
         }
 
-        void ParseParameter()
+        void ParseParameter(List<VariableType> parameterTypes)
         {
-            ParseVariableDeclaration();
+            ParseVariableDeclaration(parameterTypes);
 
             var accessToken = Stack.Peek();
             if (!(accessToken.KeywordValue == Keyword.IN || accessToken.KeywordValue == Keyword.OUT || accessToken.KeywordValue == Keyword.INOUT))
@@ -323,10 +374,24 @@ namespace BnfCompiler
             {
                 ProcessToken("PROCEDURE");
             }
+
+            _table.ExitScope();
         }
 
-        void ParseVariableDeclaration()
+        void ParseVariableDeclaration(List<VariableType> parameterTypes = null)
         {
+            var variableType = VariableType.DEFAULT;
+
+            var globalToken = Stack.Peek();
+            if (globalToken.KeywordValue == Keyword.GLOBAL)
+            {
+                ProcessToken("GLOBAL");
+                if (_table._currentScope != 0)
+                {
+                    _result.AddErrorMessage(globalToken, "Global declaration cannot be made here");
+                }
+            }
+
             var typeMarkToken = Stack.Peek();
             if (!(typeMarkToken.KeywordValue == Keyword.INTEGER || typeMarkToken.KeywordValue == Keyword.FLOAT || typeMarkToken.KeywordValue == Keyword.STRING || typeMarkToken.KeywordValue == Keyword.BOOL || typeMarkToken.KeywordValue == Keyword.CHAR))
             {
@@ -335,6 +400,29 @@ namespace BnfCompiler
             else
             {
                 ProcessToken("INTEGER | FLOAT | STRING | CHAR | BOOL");
+                switch (typeMarkToken.KeywordValue)
+                {
+                    case Keyword.INTEGER:
+                        variableType = VariableType.INTEGER;
+                        break;
+                    case Keyword.FLOAT:
+                        variableType = VariableType.FLOAT;
+                        break;
+                    case Keyword.STRING:
+                        variableType = VariableType.STRING;
+                        break;
+                    case Keyword.CHAR:
+                        variableType = VariableType.CHAR;
+                        break;
+                    case Keyword.BOOL:
+                        variableType = VariableType.BOOL;
+                        break;
+                }
+            }
+
+            if (parameterTypes != null)
+            {
+                parameterTypes.Add(variableType);
             }
 
             var identifierToken = Stack.Peek();
@@ -345,6 +433,15 @@ namespace BnfCompiler
             else
             {
                 ProcessToken("(IDENTIFIER)");
+                if (!_table.HasSymbol(identifierToken.Value))
+                {
+                    _table.InsertVariableSymbol(identifierToken, variableType);
+                }
+                else
+                {
+                    // throw new symbol already defined error
+                    _result.AddErrorMessage(identifierToken, "Variable is already defined");
+                }
             }
 
             var leftBracketToken = Stack.Peek();
@@ -425,7 +522,7 @@ namespace BnfCompiler
             {
                 ParseLoopStatement();
             }
-            else if (token.Type == Type.IDENTIFIER) 
+            else if (token.Type == Type.IDENTIFIER)
             {
                 token = Stack.Pop();
                 var nextToken = Stack.Peek();
@@ -435,7 +532,7 @@ namespace BnfCompiler
                     Stack.Push(token);
                     ParseProcedureCall();
                 }
-                else 
+                else
                 {
                     Stack.Push(token);
                     ParseAssignment();
@@ -456,13 +553,17 @@ namespace BnfCompiler
         void ParseProcedureCall()
         {
             var identifierToken = Stack.Peek();
-            if (identifierToken.Type != Type.IDENTIFIER) 
+            if (identifierToken.Type != Type.IDENTIFIER)
             {
                 _result.AddErrorMessage(identifierToken, "Expected Identifier token");
             }
             else
             {
                 ProcessToken("IDENTIFIER");
+                if (!_table.HasSymbol(identifierToken.Value))
+                {
+                    _result.AddErrorMessage(identifierToken, "Procedure not defined or not visible in either local or global scope");
+                }
             }
 
             var leftParenToken = Stack.Peek();
@@ -475,7 +576,9 @@ namespace BnfCompiler
                 ProcessToken("(");
             }
 
-            ParseArgumentList();
+            var parameterList = _table.GetSymbol(identifierToken.Value).ParameterTypes;
+            // TODO: pass in an array of types for the procedure so the expressions can be checked for the right type
+            ParseArgumentList(parameterList, 0);
 
             var rightParenToken = Stack.Peek();
             if (rightParenToken.SpecialValue != Special.RIGHT_PAREN)
@@ -490,7 +593,7 @@ namespace BnfCompiler
 
         void ParseAssignment()
         {
-            ParseDestination();
+            var assignmentTargetType = ParseDestination();
 
             var equalsToken = Stack.Peek();
             if (equalsToken.SpecialValue != Special.EQUALS)
@@ -502,10 +605,10 @@ namespace BnfCompiler
                 ProcessToken(":=");
             }
 
-            ParseExpression();
+            ParseExpression(assignmentTargetType, true);
         }
 
-        void ParseDestination()
+        VariableType ParseDestination()
         {
             var identifierToken = Stack.Peek();
             if (identifierToken.Type != Type.IDENTIFIER)
@@ -515,29 +618,31 @@ namespace BnfCompiler
             else
             {
                 ProcessToken("(IDENTIFIER)");
+                if (!_table.HasSymbol(identifierToken.Value))
+                {
+                    _result.AddErrorMessage(identifierToken, "Procedure not defined or not visible in either local or global scope");
+                }
             }
 
             var leftBracketToken = Stack.Peek();
-            if (leftBracketToken.SpecialValue != Special.LEFT_BRACKET)
-            {
-                return;
-            }
-            else
+            if (leftBracketToken.SpecialValue == Special.LEFT_BRACKET)
             {
                 ProcessToken("[");
+
+                ParseExpression(VariableType.FLOAT, true);
+
+                var rightBracketToken = Stack.Peek();
+                if (rightBracketToken.SpecialValue != Special.RIGHT_BRACKET)
+                {
+                    _result.AddErrorMessage(rightBracketToken, "Expected right bracket token");
+                }
+                else
+                {
+                    ProcessToken("]");
+                }
             }
 
-            ParseExpression();
-
-            var rightBracketToken = Stack.Peek();
-            if (rightBracketToken.SpecialValue != Special.RIGHT_BRACKET)
-            {
-                _result.AddErrorMessage(rightBracketToken, "Expected right bracket token");
-            }
-            else
-            {
-                ProcessToken("]");
-            }
+            return _table.GetSymbol(identifierToken.Value).VariableType;
         }
 
         void ParseIfStatement()
@@ -562,7 +667,7 @@ namespace BnfCompiler
                 ProcessToken("(");
             }
 
-            ParseExpression();
+            ParseExpression(VariableType.BOOL, true);
 
             var rightParenToken = Stack.Peek();
             if (rightParenToken.SpecialValue != Special.RIGHT_PAREN)
@@ -603,7 +708,7 @@ namespace BnfCompiler
             }
 
             ProcessToken("END");
-            
+
             ifToken = Stack.Peek();
             if (ifToken.KeywordValue != Keyword.IF)
             {
@@ -649,7 +754,7 @@ namespace BnfCompiler
                 ProcessToken(";");
             }
 
-            ParseExpression();
+            ParseExpression(VariableType.BOOL, true);
 
             var rightParenToken = Stack.Peek();
             if (rightParenToken.SpecialValue != Special.RIGHT_PAREN)
@@ -674,100 +779,187 @@ namespace BnfCompiler
             if (forToken.KeywordValue != Keyword.FOR)
             {
                 _result.AddErrorMessage(forToken, "Missing ending for token");
-            } 
+            }
             else
             {
                 ProcessToken("FOR");
             }
         }
 
-        void ParseExpression()
+        Expression ParseExpression(VariableType? expectedType = null, bool topLevel = false)
         {
+            var notOp = false;
             var negativeToken = Stack.Peek();
             if (negativeToken.KeywordValue == Keyword.NOT)
             {
                 ProcessToken("NOT");
+                notOp = true;
             }
 
-            ParseArithOp();
+            var exp = ParseArithOp();
+            if (notOp)
+            {
+                var topExp = new Expression();
+                topExp.Operator = Operator.NOT;
+                topExp.Right = exp;
+                exp = topExp;
+            }
+
+            if (!topLevel) 
+            {
+                return exp;
+            }
+            
+            var list = new List<string>();
+            var errorList = new Dictionary<Token, string>();
+            var returnType = exp.WalkExpression(list, errorList);
+            if (returnType != null) 
+            {
+                _result.AddPlainMessage(negativeToken, "Expression statement: " + String.Join(" ", list.ToArray()) + " -> " + Enum.GetName(typeof(VariableType), returnType.VariableType));
+            }
+            else
+            {
+                _result.AddErrorMessage(negativeToken, "Failed to determine result type of expression");
+            }
+
+            foreach (var entry in errorList)
+            {
+                _result.AddErrorMessage(entry.Key, entry.Value);
+            }
+
+            if (expectedType != null && returnType != null && returnType.VariableType != expectedType)
+            {
+                _result.AddErrorMessage(negativeToken, $"Expression not of type {Enum.GetName(typeof(VariableType), expectedType)}");
+            }
+
+            return null;
         }
 
-        void ParseArithOp()
+        Expression ParseArithOp()
         {
-            ParseRelation();
+            var exp = ParseRelation();
 
             var andOrToken = Stack.Peek();
             if (!(andOrToken.SpecialValue == Special.AND || andOrToken.SpecialValue == Special.OR))
             {
-                return;
+                return exp;
             }
-            else
-            {
-                ProcessToken("& | (|)");
+            ProcessToken("& | (|)");
+            var newExp = new Expression();
+            newExp.Left = exp;
+            switch (andOrToken.SpecialValue) {
+                case Special.AND:
+                    newExp.Operator = Operator.AND;
+                    break;
+                case Special.OR:
+                    newExp.Operator = Operator.OR;
+                    break;
             }
-
-            ParseArithOp();
+            newExp.OperationType = OperationType.LOGICAL;
+            newExp.Right = ParseArithOp();
+            newExp.OperationToken = andOrToken;
+            return newExp;
         }
 
-        void ParseRelation()
+        Expression ParseRelation()
         {
-            ParseTerm();
+            var exp = ParseTerm();
 
             var plusNegToken = Stack.Peek();
             if (!(plusNegToken.SpecialValue == Special.PLUS || plusNegToken.SpecialValue == Special.NEGATIVE))
             {
-                return;
+                return exp;
             }
-            else
-            {
-                ProcessToken("+ | -");
+            ProcessToken("+ | -");
+            var newExp = new Expression();
+            newExp.Left = exp;
+            switch (plusNegToken.SpecialValue) {
+                case Special.PLUS:
+                    newExp.Operator = Operator.PLUS;
+                    break;
+                case Special.NEGATIVE:
+                    newExp.Operator = Operator.MINUS;
+                    break;
             }
-
-            ParseRelation();
+            newExp.Right = ParseRelation();
+            newExp.OperationType = OperationType.MATH;
+            newExp.OperationToken = plusNegToken;
+            return newExp;
         }
 
-        void ParseTerm()
+        Expression ParseTerm()
         {
-            ParseFactor();
+            var exp = ParseFactor();
 
             var relationToken = Stack.Peek();
             if (!(relationToken.SpecialValue == Special.LESS_THAN || relationToken.SpecialValue == Special.LESS_THAN_OR_EQUAL || relationToken.SpecialValue == Special.GREATER_THAN || relationToken.SpecialValue == Special.GREATER_THAN_OR_EQUAL || relationToken.SpecialValue == Special.DOUBLE_EQUALS || relationToken.SpecialValue == Special.NOT_EQUAL))
             {
-                return;
+                return exp;
             }
-            else
-            {
-                ProcessToken("RELATION OPERATOR");
+            ProcessToken("RELATION OPERATOR");
+            var newExp = new Expression();
+            newExp.Left = exp;
+            switch (relationToken.SpecialValue) {
+                case Special.LESS_THAN:
+                    newExp.Operator = Operator.LESS_THAN;
+                    break;
+                case Special.LESS_THAN_OR_EQUAL:
+                    newExp.Operator = Operator.LESS_THAN_OR_EQUAL;
+                    break;
+                case Special.GREATER_THAN:
+                    newExp.Operator = Operator.GREATER_THAN;
+                    break;
+                case Special.GREATER_THAN_OR_EQUAL:
+                    newExp.Operator = Operator.GREATER_THAN_OR_EQUAL;
+                    break;
+                case Special.DOUBLE_EQUALS:
+                    newExp.Operator = Operator.DOUBLE_EQUAL;
+                    break;
+                case Special.NOT_EQUAL:
+                    newExp.Operator = Operator.NOT_EQUAL;
+                    break;
             }
-
-            ParseTerm();
+            newExp.Right = ParseTerm();
+            newExp.OperationType = OperationType.RELATION;
+            newExp.OperationToken = relationToken;
+            return newExp;
         }
 
-        void ParseFactor()
+        Expression ParseFactor()
         {
-            ParseWord();
+            var exp = ParseWord();
 
             var multDivToken = Stack.Peek();
             if (!(multDivToken.SpecialValue == Special.MULTIPLY || multDivToken.SpecialValue == Special.DIVIDE))
             {
-                return;
-            }
-            else
-            {
-                ProcessToken("* | /");
+                return exp;
             }
 
-            ParseFactor();
+            ProcessToken("* | /");
+            var newExp = new Expression();
+            newExp.Left = exp;
+            switch (multDivToken.SpecialValue) {
+                case Special.MULTIPLY:
+                    newExp.Operator = Operator.MULTIPLY;
+                    break;
+                case Special.DIVIDE:
+                    newExp.Operator = Operator.DIVIDE;
+                    break;
+            }
+            newExp.OperationType = OperationType.MATH;
+            newExp.Right = ParseFactor();
+            newExp.OperationToken = multDivToken;
+            return newExp;
         }
 
-        void ParseWord()
+        Expression ParseWord()
         {
             var token = Stack.Peek();
             if (token.SpecialValue == Special.LEFT_PAREN)
             {
                 ProcessToken("(");
-                
-                ParseExpression();
+
+                var exp = ParseExpression();
 
                 var rightParenToken = Stack.Peek();
                 if (rightParenToken.SpecialValue != Special.RIGHT_PAREN)
@@ -778,48 +970,113 @@ namespace BnfCompiler
                 {
                     ProcessToken(")");
                 }
+
+                return exp;
             }
             else if (token.Type == Type.STRING)
             {
                 ProcessToken("STRING");
+                var value = new Value();
+                value.StringValue = token.StringValue;
+                value.VariableType = VariableType.STRING;
+                value.token = token;
+                var exp = new Expression();
+                exp.Value = value;
+                return exp;
             }
             else if (token.Type == Type.CHAR)
             {
                 ProcessToken("CHAR");
+                var value = new Value();
+                value.CharValue = token.CharValue;
+                value.VariableType = VariableType.CHAR;
+                value.token = token;
+                var exp = new Expression();
+                exp.Value = value;
+                return exp;
             }
             else if (token.Type == Type.BOOL)
             {
                 ProcessToken("TRUE | FALSE");
+                var value = new Value();
+                value.BoolValue = token.BoolValue;
+                value.VariableType = VariableType.BOOL;
+                value.token = token;
+                var exp = new Expression();
+                exp.Value = value;
+                return exp;
             }
-            else if (token.Type == Type.FLOAT || token.Type == Type.INTEGER)
+            else if (token.Type == Type.FLOAT)
             {
-                ProcessToken("INTEGER | FLOAT");
+                ProcessToken("FLOAT");
+                var value = new Value();
+                value.FloatValue = token.FloatValue;
+                value.VariableType = VariableType.FLOAT;
+                value.token = token;
+                var exp = new Expression();
+                exp.Value = value;
+                return exp;
+            }
+            else if (token.Type == Type.INTEGER)
+            {
+                ProcessToken("INTEGER");
+                var value = new Value();
+                value.IntValue = token.IntValue;
+                value.VariableType = VariableType.INTEGER;
+                value.token = token;
+                var exp = new Expression();
+                exp.Value = value;
+                return exp;
             }
             else if (token.Type == Type.IDENTIFIER)
             {
-                ParseName();
+                var value = ParseName();
+                var exp = new Expression();
+                exp.Value = value;
+                return exp;
             }
             else if (token.SpecialValue == Special.NEGATIVE)
             {
                 ProcessToken("-");
                 var nextToken = Stack.Peek();
-                if (nextToken.Type == Type.INTEGER || nextToken.Type == Type.FLOAT)
+                if (nextToken.Type == Type.FLOAT)
                 {
-                    // do nothing
-                    ProcessToken("INTEGER | FLOAT");
+                    ProcessToken("FLOAT");
+                    var value = new Value();
+                    value.FloatValue = -nextToken.FloatValue; //the value is set to negative b/c of the "-" token above  
+                    value.VariableType = VariableType.FLOAT;
+                    value.token = nextToken;
+                    var exp = new Expression();
+                    exp.Value = value;
+                    return exp;
+                }
+                else if (nextToken.Type == Type.INTEGER )
+                {
+                    ProcessToken("INTEGER");
+                    var value = new Value();
+                    value.IntValue = -nextToken.IntValue;
+                    value.VariableType = VariableType.INTEGER;
+                    value.token = nextToken;
+                    var exp = new Expression();
+                    exp.Value = value;
+                    return exp;
                 }
                 else
                 {
-                    ParseName();
+                    var value = ParseName();
+                    var exp = new Expression();
+                    exp.Value = value;
+                    return exp;
                 }
             }
-            else 
+            else
             {
                 _result.AddErrorMessage(token, "Unexpected token");
+                return null;
             }
         }
 
-        void ParseName()
+        Value ParseName(VariableType? targetType = null)
         {
             var identifierToken = Stack.Peek();
             if (identifierToken.Type != Type.IDENTIFIER)
@@ -829,32 +1086,39 @@ namespace BnfCompiler
             else
             {
                 ProcessToken("IDENTIFIER");
+                if (!_table.HasSymbol(identifierToken.Value))
+                {
+                    _result.AddErrorMessage(identifierToken, "Variable not defined or not visible in either local or global scope");
+                }
             }
 
             var leftBracketToken = Stack.Peek();
-            if (leftBracketToken.SpecialValue != Special.LEFT_BRACKET)
-            {
-                return;
-            }
-            else
+            if (leftBracketToken.SpecialValue == Special.LEFT_BRACKET)
             {
                 ProcessToken("[");
+
+                ParseExpression(VariableType.INTEGER, true);
+
+                var rightBracketToken = Stack.Peek();
+                if (rightBracketToken.SpecialValue != Special.RIGHT_BRACKET)
+                {
+                    _result.AddErrorMessage(rightBracketToken, "Expected right paren token");
+                }
+                else
+                {
+                    ProcessToken("]");
+                }
             }
 
-            ParseExpression();
-
-            var rightBracketToken = Stack.Peek();
-            if (rightBracketToken.SpecialValue != Special.RIGHT_BRACKET)
-            {
-                _result.AddErrorMessage(rightBracketToken, "Expected right paren token");
-            }
-            else
-            {
-                ProcessToken("]");
-            }
+            var symbol = _table.GetSymbol(identifierToken.Value);
+            var value = new Value();
+            value.VariableValue = identifierToken.Value;
+            value.VariableType = symbol.VariableType;
+            value.token = identifierToken;
+            return value;
         }
 
-        void ParseArgumentList()
+        void ParseArgumentList(List<VariableType> parameterList, int count)
         {
             var token = Stack.Peek();
             if (token.SpecialValue == Special.RIGHT_PAREN)
@@ -862,13 +1126,16 @@ namespace BnfCompiler
                 return;
             }
 
-            ParseExpression();
+            // TODO get expression types here so they can be checked
+            ParseExpression(parameterList[count], true);
+
+
 
             token = Stack.Peek();
             if (token.SpecialValue == Special.COMMA)
             {
                 ProcessToken(",");
-                ParseArgumentList();
+                ParseArgumentList(parameterList, count++);
             }
         }
     }

@@ -104,6 +104,24 @@ namespace BnfCompiler
                     BoolValue = false;
                 }
             }
+
+            if (Type == Type.INTEGER)
+            {
+                IntValue = int.Parse(value);
+                FloatValue = float.Parse(value);
+            }
+            if (Type == Type.FLOAT)
+            {
+                FloatValue = float.Parse(value);
+            }
+            if (Type == Type.STRING)
+            {
+                StringValue = Value;
+            }
+            if (Type == Type.CHAR) 
+            {
+                char.TryParse(value, out CharValue);
+            } 
         }
 
         public string Value;
