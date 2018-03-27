@@ -14,12 +14,14 @@ namespace BnfCompiler
         public List<string> Messages;
         public List<string> ErrorMessages;
         private List<string> FileLines;
+        private bool _debug;
 
-        public ParserResult(List<string> fileLines)
+        public ParserResult(List<string> fileLines, bool debug)
         {
             Messages = new List<string>();
             ErrorMessages = new List<string>();
             FileLines = fileLines;
+            _debug = debug;
         }
 
         public void AddPlainMessage(Token token, string description)
@@ -36,6 +38,7 @@ namespace BnfCompiler
         {
             var desciption = $"Line {token.LineIndex + 1}, Column {token.CharIndex + 1} - Warning: {message}";
             AddMessage(desciption, token);
+            AddMessageToErrorList(desciption, token);
         }
 
         public void AddErrorMessage(Token token, string message)
@@ -58,10 +61,13 @@ namespace BnfCompiler
 
         private void AddMessage(string description, Token token)
         {
-            Messages.Add(description);
-            Console.WriteLine(description);
-            Messages.Add(FileLines[token.LineIndex].Replace('\t', ' '));
-            Messages.Add($"{GetFillerString(token.CharIndex, " ")}{GetFillerString(token.Value.Length, "^")}\n");
+            if (_debug) 
+            {
+                Messages.Add(description);
+                Console.WriteLine(description);
+                Messages.Add(FileLines[token.LineIndex].Replace('\t', ' '));
+                Messages.Add($"{GetFillerString(token.CharIndex, " ")}{GetFillerString(token.Value.Length, "^")}\n");
+            }
         }
 
         private void AddMessageToErrorList(string description, Token token)
@@ -89,14 +95,15 @@ namespace BnfCompiler
         private ParserResult _result;
         public SymbolTable _table;
 
+        private bool _debug;
         private Stack<Token> Stack;
 
-        public Parser(string file)
+        public Parser(string file, bool debug)
         {
-            _scanner = new Scanner(file);
-            _result = new ParserResult(_scanner.FileLines);
+            _scanner = new Scanner(file, debug);
+            _result = new ParserResult(_scanner.FileLines, debug);
+            _debug = debug;
             Stack = _scanner.Stack;
-
 
             for (var i = 0; i < _scanner.errors.Count; i++)
             {

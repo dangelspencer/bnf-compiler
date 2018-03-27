@@ -8,6 +8,7 @@ namespace BnfCompiler
     {
         File,
         Scanner,
+        Debug,
         Other
     }
 
@@ -29,6 +30,7 @@ namespace BnfCompiler
 
             var file = "";
             var scannerOnly = false;
+            var debug = false;
             for (var i = 0; i < args.Length; i++)
             {
                 var argType = CheckArgumentType(args[i]);
@@ -50,6 +52,10 @@ namespace BnfCompiler
                 {
                     scannerOnly = true;
                 }
+                else if (argType == ArgumentType.Debug)
+                {
+                    debug = true;
+                }
             }
 
             // verify file exists
@@ -68,7 +74,7 @@ namespace BnfCompiler
 
             if (scannerOnly)
             {
-                var scanner = new Scanner(file);
+                var scanner = new Scanner(file, debug);
                 Console.WriteLine("\n\n\nToken List:");
                 while (scanner.Stack.Count != 0)
                 {
@@ -81,17 +87,22 @@ namespace BnfCompiler
             }
             else
             {
-                var parser = new Parser(file);
+                var parser = new Parser(file, debug);
                 var result = parser.Parse();
 
-                Console.WriteLine("\n\n\nParse Results:");
-                foreach (var line in result.Messages)
+                if (debug)
                 {
-                    Console.WriteLine(line);
+                    Console.WriteLine("\n\n\nParse Messages:");
+                    foreach (var line in result.Messages)
+                    {
+                        Console.WriteLine(line);
+                    }
                 }
-
-                Console.WriteLine("\n\n\nSymbol Table Contents:");
-                parser._table.PrintSymbols();
+                if (debug) 
+                {
+                    Console.WriteLine("\n\n\nSymbol Table Contents:");
+                    parser._table.PrintSymbols();
+                }
 
                 var parseStatus = result.Success ? "Success" : "Failed";
                 Console.WriteLine($"\n\n\n\nParse Result: {parseStatus}");
@@ -120,6 +131,11 @@ namespace BnfCompiler
                 return ArgumentType.Scanner;
             }
 
+            if (argument == "-d")
+            {
+                return ArgumentType.Debug;
+            }
+
             return ArgumentType.Other;
         }
 
@@ -134,3 +150,10 @@ namespace BnfCompiler
         }
     }
 }
+
+/* TODO
+    1. Debug flag
+    2. Update expression type checking to account for casting 
+    3. Update index checking to make sure that the index is within the bounds of the array
+    4. Add a re-sync point
+*/

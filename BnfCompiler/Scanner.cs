@@ -19,10 +19,12 @@ namespace BnfCompiler
         private int commentLevel = 0;
         private int currentLine;
         private bool isLineComment = false;
+        private bool _debug;
 
         public Stack<Token> Stack;
-        public Scanner(string file)
+        public Scanner(string file, bool debug)
         {
+            _debug = debug;
             errors = new List<string>();
             errorTokens = new List<Token>();
             FileStream fileStream = new FileStream(file, FileMode.Open);
@@ -42,20 +44,23 @@ namespace BnfCompiler
                 FileLines.Add(line);
                 isLineComment = false;
                 
-                Console.WriteLine($"\nNEXT LINE: {line.ToUpper()}");
+                if (debug) Console.WriteLine($"\nNEXT LINE: {line.ToUpper()}");
                 LexCharacterByCharacter(line.ToUpper());
             }
 
-            Console.WriteLine($"Final comment level (should be 0): {commentLevel}");
-
-            Console.WriteLine("\n\n\nTokens:");
-
-            foreach(var token in tokenList)
+            if (debug) 
             {
-                Console.Write($"{token.Value} -> {Enum.GetName(typeof(Type), token.Type)} ({token.LineIndex}, {token.CharIndex})");
-                Console.WriteLine(GetTypeValue(token));
+                Console.WriteLine($"Final comment level (should be 0): {commentLevel}");
+
+                Console.WriteLine("\n\n\nTokens:");
+
+                foreach(var token in tokenList)
+                {
+                    Console.Write($"{token.Value} -> {Enum.GetName(typeof(Type), token.Type)} ({token.LineIndex}, {token.CharIndex})");
+                    Console.WriteLine(GetTypeValue(token));
+                }
+                Console.WriteLine("\n\n\n");
             }
-            Console.WriteLine("\n\n\n");
 
             for (var i = tokenList.Count - 1; i >= 0; i--)
             {
@@ -190,7 +195,7 @@ namespace BnfCompiler
                     tokenList.Add(token); 
                 }
                 
-                Console.WriteLine(Enum.GetName(typeof(Type), type));
+                if (_debug) Console.WriteLine(Enum.GetName(typeof(Type), type));
             }
 
             return type;
@@ -220,13 +225,13 @@ namespace BnfCompiler
                 return;
             }
 
-            Console.WriteLine($"CHECKING: {word.Substring(0, i)}");
+            if (_debug) Console.WriteLine($"CHECKING: {word.Substring(0, i)}");
             var type = LexWord(word.Substring(0, i));
             while (type == Type.UNKNOWN)
             {
                 if (i - 1 == 0) 
                 {
-                    Console.Write($"Lexing (single char): {word.Substring(0, i)} -> ");
+                    if (_debug) Console.Write($"Lexing (single char): {word.Substring(0, i)} -> ");
                     LexWord(word.Substring(0, i), true);
                     if (word.Length > 1) 
                     {
@@ -236,16 +241,16 @@ namespace BnfCompiler
                 }
 
                 i -= 1;
-                Console.WriteLine($"CHECKING: {word.Substring(0, i)}");
+                if (_debug) Console.WriteLine($"CHECKING: {word.Substring(0, i)}");
                 type = LexWord(word.Substring(0, i));
             }
 
-            Console.Write($"Lexing: {word.Substring(0, i)} -> ");
+            if (_debug) Console.Write($"Lexing: {word.Substring(0, i)} -> ");
             LexWord(word.Substring(0, i), true);
 
             if (type == Type.BLOCK_COMMENT)
             {
-                Console.WriteLine($"Comment Level: {commentLevel}");
+                if (_debug) Console.WriteLine($"Comment Level: {commentLevel}");
             }
             else if (type == Type.LINE_COMMENT)
             {
