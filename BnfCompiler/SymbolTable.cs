@@ -27,6 +27,7 @@ namespace BnfCompiler
         public int Scope;
         public VariableType VariableType;
         public List<VariableType> ParameterTypes;
+        public List<int> ArrayBounds;
 
         public Symbol() { }
     }
@@ -91,13 +92,14 @@ namespace BnfCompiler
             _table.Add(symbol);
         }
 
-        public void InsertVariableSymbol(Token token, VariableType type)
+        public void InsertVariableSymbol(Token token, VariableType type, List<int> arrayBounds = null)
         {
             var symbol = new Symbol();
             symbol.Token = token;
             symbol.Type = SymbolType.VARIABLE;
             symbol.Scope = _currentScope;
             symbol.VariableType = type;
+            symbol.ArrayBounds = arrayBounds;
 
             _table.Add(symbol);
         }

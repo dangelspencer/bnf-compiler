@@ -440,77 +440,82 @@ namespace BnfCompiler
             else
             {
                 ProcessToken("(IDENTIFIER)");
-                if (!_table.HasSymbol(identifierToken.Value))
+            
+                var isArray = false;
+                var leftBracketToken = Stack.Peek();
+                if (leftBracketToken.SpecialValue != Special.LEFT_BRACKET)
                 {
-                    _table.InsertVariableSymbol(identifierToken, variableType);
+                    _table.InsertVariableSymbol(identifierToken, variableType, null);
+                    return;
+                }
+                else
+                {
+                    ProcessToken("[");
+                    isArray = true;
+                }
+
+                var negativeToken = Stack.Peek();
+                if (negativeToken.SpecialValue == Special.NEGATIVE)
+                {
+                    ProcessToken("-");
+                }
+
+                var lowerBoundToken = Stack.Peek();
+                if (lowerBoundToken.Type != Type.FLOAT && lowerBoundToken.Type != Type.INTEGER)
+                {
+                    _result.AddErrorMessage(lowerBoundToken, "Expected integer");
+                }
+                else
+                {
+                    ProcessToken("Array Lower Bound");
+                }
+
+                var colonToken = Stack.Peek();
+                if (colonToken.SpecialValue != Special.COLON)
+                {
+                    _result.AddErrorMessage(colonToken, "Expected colon");
+                }
+                else
+                {
+                    ProcessToken(":");
+                }
+
+                negativeToken = Stack.Peek();
+                if (negativeToken.SpecialValue == Special.NEGATIVE)
+                {
+                    ProcessToken("-");
+                }
+
+                var upperBoundToken = Stack.Peek();
+                if (upperBoundToken.Type != Type.INTEGER && upperBoundToken.Type != Type.FLOAT)
+                {
+                    _result.AddErrorMessage(upperBoundToken, "Expected integer");
+                }
+                else
+                {
+                    ProcessToken("Array Upper Bound");
+                }
+
+                var rightBracketToken = Stack.Peek();
+                if (rightBracketToken.SpecialValue != Special.RIGHT_BRACKET)
+                {
+                    _result.AddErrorMessage(rightBracketToken, "Expected right bracket token");
+                }
+                else
+                {
+                    ProcessToken("]");
+                }
+
+                if (!_table.HasSymbol(identifierToken.Value))
+                {   List<int> arrayBounds = null;
+                    if (isArray) arrayBounds = new List<int>{lowerBoundToken.IntValue, upperBoundToken.IntValue};
+                    _table.InsertVariableSymbol(identifierToken, variableType, arrayBounds);
                 }
                 else
                 {
                     // throw new symbol already defined error
                     _result.AddErrorMessage(identifierToken, "Variable is already defined");
                 }
-            }
-
-            var leftBracketToken = Stack.Peek();
-            if (leftBracketToken.SpecialValue != Special.LEFT_BRACKET)
-            {
-                return;
-            }
-            else
-            {
-                ProcessToken("[");
-            }
-
-            var negativeToken = Stack.Peek();
-            if (negativeToken.SpecialValue == Special.NEGATIVE)
-            {
-                ProcessToken("-");
-            }
-
-            var lowerBoundToken = Stack.Peek();
-            if (lowerBoundToken.Type != Type.FLOAT && lowerBoundToken.Type != Type.INTEGER)
-            {
-                _result.AddErrorMessage(lowerBoundToken, "Expected integer");
-            }
-            else
-            {
-                ProcessToken("Array Lower Bound");
-            }
-
-            var colonToken = Stack.Peek();
-            if (colonToken.SpecialValue != Special.COLON)
-            {
-                _result.AddErrorMessage(colonToken, "Expected colon");
-            }
-            else
-            {
-                ProcessToken(":");
-            }
-
-            negativeToken = Stack.Peek();
-            if (negativeToken.SpecialValue == Special.NEGATIVE)
-            {
-                ProcessToken("-");
-            }
-
-            var upperBoundToken = Stack.Peek();
-            if (upperBoundToken.Type != Type.INTEGER && upperBoundToken.Type != Type.FLOAT)
-            {
-                _result.AddErrorMessage(upperBoundToken, "Expected integer");
-            }
-            else
-            {
-                ProcessToken("Array Upper Bound");
-            }
-
-            var rightBracketToken = Stack.Peek();
-            if (rightBracketToken.SpecialValue != Special.RIGHT_BRACKET)
-            {
-                _result.AddErrorMessage(rightBracketToken, "Expected right bracket token");
-            }
-            else
-            {
-                ProcessToken("]");
             }
         }
 
@@ -636,7 +641,7 @@ namespace BnfCompiler
             {
                 ProcessToken("[");
 
-                ParseExpression(VariableType.FLOAT, true);
+                ParseExpression(VariableType.INTEGER, true);
 
                 var rightBracketToken = Stack.Peek();
                 if (rightBracketToken.SpecialValue != Special.RIGHT_BRACKET)
