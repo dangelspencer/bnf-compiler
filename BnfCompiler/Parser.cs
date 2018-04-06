@@ -834,9 +834,25 @@ namespace BnfCompiler
                 _result.AddErrorMessage(entry.Key, entry.Value);
             }
 
-            if (expectedType != null && returnType != null && returnType.VariableType != expectedType)
+            if (expectedType != null && returnType != null)
             {
-                _result.AddErrorMessage(negativeToken, $"Expression not of type {Enum.GetName(typeof(VariableType), expectedType)}");
+                if (expectedType != returnType.VariableType)
+                {
+                    if (expectedType == VariableType.BOOL && returnType.VariableType != VariableType.INTEGER)
+                    {
+                        _result.AddErrorMessage(negativeToken, $"Unable to cast type {Enum.GetName(typeof(VariableType), returnType.VariableType)} to type {Enum.GetName(typeof(VariableType), expectedType)}");
+                    }
+
+                    if (expectedType == VariableType.INTEGER && returnType.VariableType != VariableType.BOOL && returnType.VariableType != VariableType.FLOAT)
+                    {
+                        _result.AddErrorMessage(negativeToken, $"Unable to cast type {Enum.GetName(typeof(VariableType), returnType.VariableType)} to type {Enum.GetName(typeof(VariableType), expectedType)}");
+                    }
+
+                    if (expectedType == VariableType.FLOAT && returnType.VariableType != VariableType.INTEGER)
+                    {
+                        _result.AddErrorMessage(negativeToken, $"Unable to cast type {Enum.GetName(typeof(VariableType), returnType.VariableType)} to type {Enum.GetName(typeof(VariableType), expectedType)}");
+                    }
+                }
             }
 
             return null;

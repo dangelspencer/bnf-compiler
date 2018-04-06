@@ -152,8 +152,6 @@ namespace BnfCompiler
 }
 
 /* TODO
-    1. Debug flag
-    2. Update expression type checking to account for casting 
     3. Update index checking to make sure that the index is within the bounds of the array
     4. Add a re-sync point
 */
