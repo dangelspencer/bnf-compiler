@@ -50,16 +50,16 @@ namespace BnfCompiler
             InsertProgramSymbol(programNameToken);
 
             //Insert I/O functions into global scope
-            InsertProcedureSymbol(new Token("GETBOOL", Type.IDENTIFIER, 0, 0), new List<VariableType> {VariableType.BOOL});
-            InsertProcedureSymbol(new Token("GETINTEGER", Type.IDENTIFIER, 0, 0), new List<VariableType> {VariableType.INTEGER});
-            InsertProcedureSymbol(new Token("GETFLOAT", Type.IDENTIFIER, 0, 0), new List<VariableType> {VariableType.FLOAT});
-            InsertProcedureSymbol(new Token("GETSTRING", Type.IDENTIFIER, 0, 0), new List<VariableType> {VariableType.STRING});
-            InsertProcedureSymbol(new Token("GETCHAR", Type.IDENTIFIER, 0, 0), new List<VariableType> {VariableType.CHAR});
-            InsertProcedureSymbol(new Token("PUTBOOL", Type.IDENTIFIER, 0, 0), new List<VariableType> {VariableType.BOOL});
-            InsertProcedureSymbol(new Token("PUTINTEGER", Type.IDENTIFIER, 0, 0), new List<VariableType> {VariableType.INTEGER});
-            InsertProcedureSymbol(new Token("PUTFLOAT", Type.IDENTIFIER, 0, 0), new List<VariableType> {VariableType.FLOAT});
-            InsertProcedureSymbol(new Token("PUTSTRING", Type.IDENTIFIER, 0, 0), new List<VariableType> {VariableType.STRING});
-            InsertProcedureSymbol(new Token("PUTCHAR", Type.IDENTIFIER, 0, 0), new List<VariableType> {VariableType.CHAR});
+            InsertProcedureSymbol(new Token("GETBOOL", Type.IDENTIFIER, 0, 0), new List<VariableType> {VariableType.BOOL}, true);
+            InsertProcedureSymbol(new Token("GETINTEGER", Type.IDENTIFIER, 0, 0), new List<VariableType> {VariableType.INTEGER}, true);
+            InsertProcedureSymbol(new Token("GETFLOAT", Type.IDENTIFIER, 0, 0), new List<VariableType> {VariableType.FLOAT}, true);
+            InsertProcedureSymbol(new Token("GETSTRING", Type.IDENTIFIER, 0, 0), new List<VariableType> {VariableType.STRING}, true);
+            InsertProcedureSymbol(new Token("GETCHAR", Type.IDENTIFIER, 0, 0), new List<VariableType> {VariableType.CHAR}, true);
+            InsertProcedureSymbol(new Token("PUTBOOL", Type.IDENTIFIER, 0, 0), new List<VariableType> {VariableType.BOOL}, true);
+            InsertProcedureSymbol(new Token("PUTINTEGER", Type.IDENTIFIER, 0, 0), new List<VariableType> {VariableType.INTEGER}, true);
+            InsertProcedureSymbol(new Token("PUTFLOAT", Type.IDENTIFIER, 0, 0), new List<VariableType> {VariableType.FLOAT}, true);
+            InsertProcedureSymbol(new Token("PUTSTRING", Type.IDENTIFIER, 0, 0), new List<VariableType> {VariableType.STRING}, true);
+            InsertProcedureSymbol(new Token("PUTCHAR", Type.IDENTIFIER, 0, 0), new List<VariableType> {VariableType.CHAR}, true);
         }
 
         public void EnterScope(int scope = -1) // int? allows us to get a new scope by passing no parameters and still enter a previously defined scope if we want to
@@ -80,24 +80,52 @@ namespace BnfCompiler
             symbol.Scope = _currentScope;
 
             _table.Add(symbol);
+            EnterScope();
         }
 
-        public void InsertProcedureSymbol(Token token, List<VariableType> parameterTypes)
+        public void InsertProcedureSymbol(Token token, List<VariableType> parameterTypes, bool isGlobal)
         {
             var symbol = new Symbol();
             symbol.Token = token;
             symbol.Type = SymbolType.PROCEDURE;
             symbol.Scope = _currentScope;
             symbol.ParameterTypes = parameterTypes;
-            _table.Add(symbol);
+            
+            if (isGlobal)
+            {
+                symbol.Scope = 0;
+                _table.Add(symbol);
+            }
+            else 
+            {
+                _table.Add(symbol);
+            
+                //also add symbol to scope above (if it's not the top level)
+                if (scopeList.Count > 2)
+                {
+                    var temp = scopeList.Pop();
+                    symbol = new Symbol();
+                    symbol.Token = token;
+                    symbol.Type = SymbolType.PROCEDURE;
+                    symbol.Scope = _currentScope;
+                    symbol.ParameterTypes = parameterTypes;
+                    _table.Add(symbol);
+                    scopeList.Push(temp);
+                }   
+            }
         }
 
-        public void InsertVariableSymbol(Token token, VariableType type, List<int> arrayBounds = null)
+        public void InsertVariableSymbol(Token token, VariableType type, bool isGlobal, List<int> arrayBounds = null)
         {
+            
             var symbol = new Symbol();
             symbol.Token = token;
             symbol.Type = SymbolType.VARIABLE;
-            symbol.Scope = _currentScope;
+            if (isGlobal) {
+                symbol.Scope = 0;
+            } else {
+                symbol.Scope = _currentScope;
+            }
             symbol.VariableType = type;
             symbol.ArrayBounds = arrayBounds;
 

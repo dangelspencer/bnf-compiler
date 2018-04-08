@@ -250,11 +250,13 @@ namespace BnfCompiler
 
         void ParseProcedureHeader()
         {
+            var isGlobal = false;
             var globalToken = Stack.Peek();
             if (globalToken.KeywordValue == Keyword.GLOBAL)
             {
                 ProcessToken("GLOBAL");
-                if (_table._currentScope != 0)
+                isGlobal = true;
+                if (_table._currentScope != 1)
                 {
                     _result.AddErrorMessage(globalToken, "Global declaration cannot be made here");
                 }
@@ -299,21 +301,14 @@ namespace BnfCompiler
             
             var variableTypes = new List<VariableType>();
 
-
+            _table.EnterScope();
             var rightParenToken = Stack.Peek();
             if (rightParenToken.SpecialValue != Special.RIGHT_PAREN)
             {
                 ParseParameterList(variableTypes);
             }
 
-            _table.InsertProcedureSymbol(identifierToken, variableTypes);
-            //TODO throw error if global is present outside of the global scope? Or add the procedure / variable to the global scope?
-            _table.EnterScope();
-            _table.InsertProcedureSymbol(identifierToken, variableTypes); // so we have access to the current procedure on the new scope for recursion
-
-            
-
-
+            _table.InsertProcedureSymbol(identifierToken, variableTypes, isGlobal); // so we have access to the current procedure on the new scope for recursion
 
             rightParenToken = Stack.Peek();
             if (rightParenToken.SpecialValue != Special.RIGHT_PAREN)
@@ -388,12 +383,13 @@ namespace BnfCompiler
         void ParseVariableDeclaration(List<VariableType> parameterTypes = null)
         {
             var variableType = VariableType.DEFAULT;
-
+            var isGlobal = false;
             var globalToken = Stack.Peek();
             if (globalToken.KeywordValue == Keyword.GLOBAL)
             {
                 ProcessToken("GLOBAL");
-                if (_table._currentScope != 0)
+                isGlobal = true;
+                if (_table._currentScope != 1)
                 {
                     _result.AddErrorMessage(globalToken, "Global declaration cannot be made here");
                 }
@@ -445,7 +441,7 @@ namespace BnfCompiler
                 var leftBracketToken = Stack.Peek();
                 if (leftBracketToken.SpecialValue != Special.LEFT_BRACKET)
                 {
-                    _table.InsertVariableSymbol(identifierToken, variableType, null);
+                    _table.InsertVariableSymbol(identifierToken, variableType, isGlobal, null);
                     return;
                 }
                 else
@@ -509,7 +505,7 @@ namespace BnfCompiler
                 if (!_table.HasSymbol(identifierToken.Value))
                 {   List<int> arrayBounds = null;
                     if (isArray) arrayBounds = new List<int>{lowerBoundToken.IntValue, upperBoundToken.IntValue};
-                    _table.InsertVariableSymbol(identifierToken, variableType, arrayBounds);
+                    _table.InsertVariableSymbol(identifierToken, variableType, isGlobal, arrayBounds);
                 }
                 else
                 {
@@ -632,7 +628,7 @@ namespace BnfCompiler
                 ProcessToken("(IDENTIFIER)");
                 if (!_table.HasSymbol(identifierToken.Value))
                 {
-                    _result.AddErrorMessage(identifierToken, "Procedure not defined or not visible in either local or global scope");
+                    _result.AddErrorMessage(identifierToken, "Variable not defined or not visible in either local or global scope");                    
                 }
             }
 

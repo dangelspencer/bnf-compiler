@@ -70,7 +70,7 @@ namespace BnfCompiler
                 return 1;
             }
 
-            System.Console.WriteLine("Processing file: " + file.Substring(file.LastIndexOf('/') + 1));
+            System.Console.WriteLine("Processing file: " + file);
 
             if (scannerOnly)
             {
@@ -105,7 +105,7 @@ namespace BnfCompiler
                 }
 
                 var parseStatus = result.Success ? "Success" : "Failed";
-                Console.WriteLine($"\n\n\n\nParse Result: {parseStatus}");
+                Console.WriteLine($"\n\nParse Result: {parseStatus}");
 
                 if(!result.Success) 
                 {
@@ -152,5 +152,7 @@ namespace BnfCompiler
 }
 
 /* TODO
-    4. Add a re-sync point
+    5. Check for infinite loop
 */
+
+// for f in $(find ../testPgms -name '*.src'); do dotnet run --file $f; done

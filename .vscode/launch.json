@@ -11,7 +11,7 @@
             "preLaunchTask": "build",
             // If you have changed target frameworks, make sure to update the program path.
             "program": "${workspaceFolder}/BnfCompiler/bin/Debug/netcoreapp2.0/BnfCompiler.dll",
-            "args": ["--file", "../testPgms/incorrect/lexer/invalidChars.src"],
+            "args": ["--file", "../testPgms/correct/recursiveFib.src"],
             "cwd": "${workspaceFolder}/BnfCompiler",
             // For more information about the 'console' field, see https://github.com/OmniSharp/omnisharp-vscode/blob/master/debugger-launchjson.md#console-terminal-window
             "console": "internalConsole",
