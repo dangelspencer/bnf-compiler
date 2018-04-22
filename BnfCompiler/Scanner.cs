@@ -14,6 +14,7 @@ namespace BnfCompiler
 
         public List<string> errors;
         public List<Token> errorTokens;
+        public Stack<Token> BlockCommentTokens;
 
         private List<Token> tokenList;
         private int commentLevel = 0;
@@ -30,6 +31,7 @@ namespace BnfCompiler
             FileStream fileStream = new FileStream(file, FileMode.Open);
             var _reader = new StreamReader(fileStream);
             Stack = new Stack<Token>();
+            BlockCommentTokens = new Stack<Token>();
 
             tokenList = new List<Token>();
 
@@ -46,6 +48,12 @@ namespace BnfCompiler
                 
                 if (debug) Console.WriteLine($"\nNEXT LINE: {line.ToUpper()}");
                 LexCharacterByCharacter(line.ToUpper());
+            }
+
+            if (commentLevel != 0)
+            {
+                errors.Add("Missing closing block comment");
+                errorTokens.Add(BlockCommentTokens.Peek());
             }
 
             if (debug) 
@@ -98,12 +106,36 @@ namespace BnfCompiler
             }
             else if (word == "/*") 
             {
-                if (createToken) commentLevel += 1;
+                if (createToken) 
+                { 
+                    commentLevel += 1;
+                    var tokensInLine = tokenList.Where(x => x.LineIndex == currentLine).Select(x => x.Value).ToList();
+                    var str = String.Join("", tokensInLine);
+                    var index = 0;
+                    if (str != "")
+                    {
+                        var line = FileLines[currentLine].Substring(str.Length).ToUpper();
+                        index = line.IndexOf(word) + (str.Length);
+                    }
+                    BlockCommentTokens.Push(new Token(word, type, currentLine, index));
+                }
                 type = Type.BLOCK_COMMENT;
             }
             else if (word == "*/")
             {
-                if (createToken) commentLevel -= 1;
+                if (createToken) 
+                { 
+                    commentLevel -= 1;
+                    var tokensInLine = tokenList.Where(x => x.LineIndex == currentLine).Select(x => x.Value).ToList();
+                    var str = String.Join("", tokensInLine);
+                    var index = 0;
+                    if (str != "")
+                    {
+                        var line = FileLines[currentLine].Substring(str.Length).ToUpper();
+                        index = line.IndexOf(word) + (str.Length);
+                    }
+                    BlockCommentTokens.Push(new Token(word, type, currentLine, index));
+                }
                 type = Type.BLOCK_COMMENT;
             }
             else if (String.IsNullOrWhiteSpace(word))

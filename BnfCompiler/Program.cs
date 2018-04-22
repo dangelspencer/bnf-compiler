@@ -152,7 +152,7 @@ namespace BnfCompiler
 }
 
 /* TODO
-    5. Check for infinite loop
+    7. Allow casting char to int
 */
 
 // for f in $(find ../testPgms -name '*.src'); do dotnet run --file $f; done
