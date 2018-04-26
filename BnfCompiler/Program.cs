@@ -69,7 +69,7 @@ namespace BnfCompiler
                 System.Console.WriteLine("Error: Unable to read file.\nPlease give the full name of the file to be processed");
                 return 1;
             }
-
+            System.Console.WriteLine("-------------------------------------------------------------------------------------------");
             System.Console.WriteLine("Processing file: " + file);
 
             if (scannerOnly)
@@ -115,7 +115,7 @@ namespace BnfCompiler
                     }
                 }            
             }
-
+            System.Console.WriteLine("-------------------------------------------------------------------------------------------");
             return 0;
         }
 
@@ -150,9 +150,5 @@ namespace BnfCompiler
         }
     }
 }
-
-/* TODO
-    7. Allow casting char to int
-*/
 
 // for f in $(find ../testPgms -name '*.src'); do dotnet run --file $f; done

@@ -121,7 +121,10 @@ namespace BnfCompiler
             } 
             catch (Exception ex)
             {
-                _result.AddPlainErrorMessage("Error: " + ex.Message);
+                if (ex.Message == "Stack empty.")
+                {
+                    _result.AddPlainErrorMessage("Error: Unexpected end of token stream");
+                }
             }
             return _result;
         }
@@ -175,8 +178,15 @@ namespace BnfCompiler
         void ParseProgramBody()
         {
             var beginToken = Stack.Peek();
+            var count = 0;
             while (beginToken.KeywordValue != Keyword.BEGIN)
             {
+                if (count == Stack.Count)
+                {
+                    var unknownToken = Stack.Pop();
+                    _result.AddErrorMessage(unknownToken, "Unable to parse token, removing it from the stack and rechecking");
+                }
+                count = Stack.Count;
                 ParseDeclaration();
                 beginToken = Stack.Peek();
             }
@@ -190,7 +200,7 @@ namespace BnfCompiler
             }
 
             var endToken = Stack.Peek();
-            var count = 0;
+            count = 0;
             while (endToken.KeywordValue != Keyword.END)
             {
                 if (count == Stack.Count)
@@ -366,8 +376,15 @@ namespace BnfCompiler
         void ParseProcedureBody()
         {
             var beginToken = Stack.Peek();
+            var count = 0;
             while (beginToken.KeywordValue != Keyword.BEGIN)
             {
+                if (count == Stack.Count)
+                {
+                    var unknownToken = Stack.Pop();
+                    _result.AddErrorMessage(unknownToken, "Unable to parse token, removing it from the stack and rechecking");
+                }
+                count = Stack.Count;
                 ParseDeclaration();
                 beginToken = Stack.Peek();
             }
@@ -375,7 +392,7 @@ namespace BnfCompiler
             ProcessToken("BEGIN");
 
             var endToken = Stack.Peek();
-            var count = 0;
+            count = 0;
             while (endToken.KeywordValue != Keyword.END)
             {
                 if (count == Stack.Count)
@@ -886,16 +903,27 @@ namespace BnfCompiler
                     if (expectedType == VariableType.BOOL && returnType.VariableType != VariableType.INTEGER)
                     {
                         _result.AddErrorMessage(negativeToken, $"Unable to cast type {Enum.GetName(typeof(VariableType), returnType.VariableType)} to type {Enum.GetName(typeof(VariableType), expectedType)}");
+                        return null;
                     }
-
-                    if (expectedType == VariableType.INTEGER && returnType.VariableType != VariableType.BOOL)
+                    if (expectedType == VariableType.INTEGER && returnType.VariableType != VariableType.BOOL && returnType.VariableType != VariableType.CHAR)
                     {
                         _result.AddErrorMessage(negativeToken, $"Unable to cast type {Enum.GetName(typeof(VariableType), returnType.VariableType)} to type {Enum.GetName(typeof(VariableType), expectedType)}");
+                        return null;
                     }
-
                     if (expectedType == VariableType.FLOAT && returnType.VariableType != VariableType.INTEGER)
                     {
                         _result.AddErrorMessage(negativeToken, $"Unable to cast type {Enum.GetName(typeof(VariableType), returnType.VariableType)} to type {Enum.GetName(typeof(VariableType), expectedType)}");
+                        return null;
+                    }
+                    if (expectedType == VariableType.STRING && returnType.VariableType != VariableType.STRING)
+                    {
+                        _result.AddErrorMessage(negativeToken, $"Unable to cast type {Enum.GetName(typeof(VariableType), returnType.VariableType)} to type {Enum.GetName(typeof(VariableType), expectedType)}");
+                        return null;
+                    }
+                    if (expectedType == VariableType.CHAR && returnType.VariableType != VariableType.CHAR && returnType.VariableType != VariableType.INTEGER)
+                    {
+                        _result.AddErrorMessage(negativeToken, $"Unable to cast type {Enum.GetName(typeof(VariableType), returnType.VariableType)} to type {Enum.GetName(typeof(VariableType), expectedType)}");
+                        return null;
                     }
                 }
             }
